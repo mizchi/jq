@@ -39,98 +39,53 @@ let r1 = @jq.run_compiled(filter, @json.parse("[1,2,3]"))
 
 See [README.mbt.md](src/README.mbt.md) for full doc-tested API examples.
 
-## Features
+## Compatibility
 
-- Lexer, recursive descent parser, callback-based evaluator
-- 87.3% compatibility with jq's official test suite (151/173 verified tests)
-- 50+ builtin functions
-- Native CLI + JS library target
+94.7% compatible with jq 1.8.1 (178/188 verified tests from `tests/jq.test`).
 
-### Supported Syntax
+334 of 514 tests ported. 129 tests excluded due to unimplemented features. 401 MoonBit tests total.
+
+### Supported Features
 
 | Category | Features |
 |---|---|
-| Basic | `.` (identity), `.foo`, `.[n]`, `.[]`, `..` (recursive descent) |
-| Operators | `\|`, `,`, `+ - * / %`, `== != < > <= >=`, `and or not` |
+| Basic | `.`, `.foo`, `.[n]`, `.[]`, `..`, `.[m:n]` |
+| Operators | `\|`, `,`, `+ - * / %`, `== != < > <= >=`, `and or not`, `//` |
 | Construction | `[expr]`, `{k: v}`, `{foo}` (shorthand), `(expr)` |
-| Control | `if-then-elif-else-end`, `try-catch`, `.foo?`, `try expr` |
+| Control | `if-then-elif-else-end`, `try-catch`, `.foo?`, `foreach`, `while`, `until` |
 | Binding | `as $x`, `reduce`, `def f: body;`, `def f(a;b): body;` |
-| Builtins | `length`, `keys`, `values`, `type`, `select`, `map`, `map_values`, `empty`, `add`, `sort`, `sort_by`, `group_by`, `unique`, `unique_by`, `reverse`, `flatten`, `min`, `max`, `min_by`, `max_by`, `first`, `last`, `limit`, `range`, `has`, `contains`, `inside`, `any`, `all`, `tostring`, `tonumber`, `tojson`, `fromjson`, `ascii_downcase`, `ascii_upcase`, `split`, `join`, `startswith`, `endswith`, `ltrimstr`, `rtrimstr`, `trim`, `ltrim`, `rtrim`, `trimstr`, `abs`, `fabs`, `floor`, `ceil`, `round`, `explode`, `implode`, `to_entries`, `from_entries`, `with_entries`, `walk`, `transpose`, `bsearch`, `indices`, `index`, `rindex`, `not`, `recurse`, `debug`, `getpath`, `IN` |
+| Builtins | `length`, `keys`, `values`, `type`, `select`, `map`, `map_values`, `empty`, `add`, `sort`, `sort_by`, `group_by`, `unique`, `unique_by`, `reverse`, `flatten`, `min`, `max`, `min_by`, `max_by`, `first`, `last`, `limit`, `range`, `has`, `contains`, `inside`, `any`, `all`, `tostring`, `tonumber`, `toboolean`, `tojson`, `fromjson`, `ascii_downcase`, `ascii_upcase`, `split`, `join`, `startswith`, `endswith`, `ltrimstr`, `rtrimstr`, `trim`, `ltrim`, `rtrim`, `trimstr`, `abs`, `fabs`, `floor`, `ceil`, `round`, `explode`, `implode`, `to_entries`, `from_entries`, `with_entries`, `walk`, `transpose`, `bsearch`, `indices`, `index`, `rindex`, `not`, `recurse`, `debug`, `getpath`, `IN`, `error`, `paths`, `isempty`, `nth`, `skip`, `builtins` |
+| Math | `sqrt`, `sin`, `cos`, `atan`, `atan2`, `log`, `log2`, `exp`, `exp2`, `pow`, `infinite`, `nan`, `isnan`, `isinfinite`, `isfinite`, `isnormal` |
 | Formats | `@base64`, `@base64d`, `@json`, `@text`, `@html`, `@uri` |
 | Types | `numbers`, `strings`, `booleans`, `nulls`, `arrays`, `objects`, `iterables`, `scalars` |
 
-## Known Incompatibilities with jq
+### Excluded Tests (129 of 514)
 
-### Parser Limitations
+| Feature | Tests | Notes |
+|---|---|---|
+| `=` assignment | 26 | Requires path expression tracking |
+| `?//` alternative destructuring | 17 | Parser extension needed |
+| `\|=` update assignment | 14 | Requires path expression tracking |
+| `\(expr)` string interpolation | 10 | Lexer rework needed |
+| `as [$a,$b]` destructuring bind | 9 | Pattern matching extension |
+| `import/include` | 9 | Module system |
+| `path()` expression | 8 | Path tracking |
+| `label/break` | 6 | Non-local control flow |
+| `setpath` | 6 | Path mutation |
+| `del()` | 5 | Path mutation |
+| `as {$a}` destructuring bind | 4 | Pattern matching extension |
+| `pick()` | 4 | Path tracking |
+| `delpaths()` | 3 | Path mutation |
+| Other | 8 | `@csv`, `@tsv`, `@sh`, `utf8bytelength`, `$__loc__`, `input` |
 
-- `{x:-.}` (unary minus as object value without parens) is not supported. Use `{x:(-.)}`.
-- `try -.?` does not propagate to catch correctly.
-- String interpolation `\(expr)` is not supported.
+See [TODO.md](TODO.md) for details.
 
-### Numeric Precision
+### Known Precision Limits
 
-- Numbers use IEEE 754 double precision. Integers larger than 2^53 overflow to `Infinity` instead of being represented exactly.
-- jq outputs `2.0` for some integer-valued float results (e.g., `1+1` with string input gives `2.0` in jq, `2` here).
-- Scientific notation in output (e.g., `1e-1`, `9E+999999999`) may differ.
-
-### Unicode / String Handling
-
-- Control characters (`\b`, `\f`) are output as literal characters instead of `\u00XX` escape sequences.
-- Unicode escapes like `\u03bc` may be output as the actual character (`μ`) instead of the escape form.
-- `contains` with NUL bytes (`\u0000`) may not match correctly due to JavaScript string handling.
-
-### Slice Indexing
-
-- Float slice indices like `.[1.2:3.5]` use truncation (`.[1:3]`) instead of jq's rounding behavior (`.[1:4]`).
-
-### Unsupported Features
-
-- Assignment operators: `=`, `|=`, `+=`, `-=`, `*=`, `/=`, `%=`, `//=`
-- Alternative operator: `//`
-- Destructuring bind: `as [$a, $b]`, `as {$a}`
-- Alternative destructuring: `?//`
-- String interpolation: `\(expr)`
-- Control flow: `while`, `until`, `label`, `break`, `foreach`
-- Path operations: `path`, `paths`, `setpath`, `delpaths`, `del`, `pick`
-- Format strings: `@csv`, `@tsv`, `@sh`, `@urid`
-- Module system: `import`, `include`, `modulemeta`
-- I/O: `input`, `inputs`, `input_line_number`
-- Regex: `test` (pattern), `match`, `capture`, `scan`, `sub`, `gsub`, `splits`
-- Other: `env`, `builtins`, `$__loc__`, `$ENV`, `nth`, `skip`, `toboolean`, `utf8bytelength`, `halt`, `stderr`, `debug(msg)`, `sqrt`, `sin`, `cos`, `atan`, `log`, `exp`, `pow`, `strftime`, `strptime`, `now`, `date`, `JOIN`, `REGEX`
-
-### walk Behavior
-
-- `walk(f)` where `f` produces multiple outputs generates a combinatorial explosion instead of jq's first-output behavior.
-
-## Benchmark (js target, pre-compiled eval)
-
-| Benchmark | Ops/sec | vs Naive | Description |
-|---|---|---|---|
-| identity | 4,910,610 | 10.8x | `.` |
-| field_access | 3,805,345 | 10.5x | `.a` |
-| nested_field | 539,358 | 2.9x | `.a.b.c.d` |
-| sort | 325,085 | 2.3x | `sort` (10 elements) |
-| keys_length | 468,123 | 4.3x | `keys \| length` |
-| object_construct | 397,703 | 4.0x | `{x: .a, y: .b}` |
-| parse_complex | 321,200 | 25.1x | `if .a > 0 then ... end` |
-| reduce | 297,406 | 26.6x | `reduce .[] as $x (0; . + $x)` |
-| group_by_map | 2,516,187 | 95.9x | `group_by(.k) \| map(...)` |
-| split_join | 250,297 | 6.1x | `split(",") \| join("-")` |
-| map | 111,305 | 3.1x | `map(. + 1)` (10 elements) |
-| recursive_descent | 99,485 | 4.0x | `[.. \| numbers]` |
-| array_iterate | 83,673 | 2.8x | `[.[] \| . * 2]` (10 elements) |
-| select_filter | 48,006 | 6.2x | `[.[] \| select(. > 5)]` (10 elements) |
-| pipe_chain | 36,160 | 4.7x | `.[] \| . * 2 \| . + 1 \| tostring \| length` |
-
-*Measured on js target with `@bench`. "vs Naive" compares pre-compiled eval against naive parse+eval per call.*
-
-### Optimizations Applied
-
-- **compile/run_compiled separation**: Parse the filter once, evaluate many times
-- **Persistent scope chain**: Linked-list env makes `bind_var` O(1) (no array copy)
-- **eval_single fast path**: Single-output filters (Identity, Field, Literal, Pipe chains, variable refs) bypass callback/closure overhead
-- **AST optimization pass**: Eliminates `Pipe(Identity, x)` → `x`, strips Paren wrappers at compile time
-- **Pre-baked `$` prefix**: Variable names include `$` at parse time, avoiding runtime string concatenation
+- Integers > 2^53 overflow to `Infinity` (IEEE 754 double)
+- `-0` outputs as `0`
+- `contains` with NUL bytes may be inaccurate (JS string handling)
+- `fromjson` error messages differ from jq
 
 ## Quick Commands
 
@@ -139,7 +94,7 @@ just           # check + test
 just fmt       # format code
 just check     # type check
 just test      # run tests
-just run       # run main
+just moonjq FILTER  # run CLI
 ```
 
 ## License
