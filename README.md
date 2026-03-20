@@ -41,9 +41,9 @@ See [README.mbt.md](src/README.mbt.md) for full doc-tested API examples.
 
 ## Compatibility
 
-94.7% compatible with jq 1.8.1 (178/188 verified tests from `tests/jq.test`).
+96.2% compatible with jq 1.8.1 (252/262 verified tests).
 
-334 of 514 tests ported. 129 tests excluded due to unimplemented features. 401 MoonBit tests total.
+429 of 514 jq.test cases ported. 496 MoonBit tests total, all passing.
 
 ### Supported Features
 
@@ -51,41 +51,35 @@ See [README.mbt.md](src/README.mbt.md) for full doc-tested API examples.
 |---|---|
 | Basic | `.`, `.foo`, `.[n]`, `.[]`, `..`, `.[m:n]` |
 | Operators | `\|`, `,`, `+ - * / %`, `== != < > <= >=`, `and or not`, `//` |
-| Construction | `[expr]`, `{k: v}`, `{foo}` (shorthand), `(expr)` |
-| Control | `if-then-elif-else-end`, `try-catch`, `.foo?`, `foreach`, `while`, `until` |
-| Binding | `as $x`, `reduce`, `def f: body;`, `def f(a;b): body;` |
-| Builtins | `length`, `keys`, `values`, `type`, `select`, `map`, `map_values`, `empty`, `add`, `sort`, `sort_by`, `group_by`, `unique`, `unique_by`, `reverse`, `flatten`, `min`, `max`, `min_by`, `max_by`, `first`, `last`, `limit`, `range`, `has`, `contains`, `inside`, `any`, `all`, `tostring`, `tonumber`, `toboolean`, `tojson`, `fromjson`, `ascii_downcase`, `ascii_upcase`, `split`, `join`, `startswith`, `endswith`, `ltrimstr`, `rtrimstr`, `trim`, `ltrim`, `rtrim`, `trimstr`, `abs`, `fabs`, `floor`, `ceil`, `round`, `explode`, `implode`, `to_entries`, `from_entries`, `with_entries`, `walk`, `transpose`, `bsearch`, `indices`, `index`, `rindex`, `not`, `recurse`, `debug`, `getpath`, `IN`, `error`, `paths`, `isempty`, `nth`, `skip`, `builtins` |
+| Assignment | `=`, `\|=`, `+=`, `-=`, `*=`, `/=`, `%=`, `//=` |
+| Construction | `[expr]`, `{k: v}`, `{foo}` (shorthand), `(expr)`, `"\(.expr)"` |
+| Control | `if-then-elif-else-end`, `try-catch`, `.foo?`, `foreach`, `while`, `until`, `label/break` |
+| Binding | `as $x`, `as [$a,$b]`, `as {a:$x}`, `?//`, `reduce`, `def` |
+| Path | `path()`, `setpath()`, `getpath()`, `delpaths()`, `del()`, `pick()` |
+| Builtins | `length`, `keys`, `values`, `type`, `select`, `map`, `map_values`, `empty`, `add`, `sort`, `sort_by`, `group_by`, `unique`, `unique_by`, `reverse`, `flatten`, `min`, `max`, `min_by`, `max_by`, `first`, `last`, `limit`, `range`, `has`, `contains`, `inside`, `any`, `all`, `tostring`, `tonumber`, `toboolean`, `tojson`, `fromjson`, `ascii_downcase`, `ascii_upcase`, `split`, `join`, `startswith`, `endswith`, `ltrimstr`, `rtrimstr`, `trim`, `ltrim`, `rtrim`, `trimstr`, `abs`, `fabs`, `floor`, `ceil`, `round`, `explode`, `implode`, `to_entries`, `from_entries`, `with_entries`, `walk`, `transpose`, `bsearch`, `indices`, `index`, `rindex`, `not`, `recurse`, `debug`, `IN`, `INDEX`, `error`, `paths`, `isempty`, `nth`, `skip`, `builtins`, `utf8bytelength`, `$__loc__` |
 | Math | `sqrt`, `sin`, `cos`, `atan`, `atan2`, `log`, `log2`, `exp`, `exp2`, `pow`, `infinite`, `nan`, `isnan`, `isinfinite`, `isfinite`, `isnormal` |
 | Formats | `@base64`, `@base64d`, `@json`, `@text`, `@html`, `@uri` |
 | Types | `numbers`, `strings`, `booleans`, `nulls`, `arrays`, `objects`, `iterables`, `scalars` |
 
-### Excluded Tests (129 of 514)
+### Excluded Tests (85 of 514)
 
 | Feature | Tests | Notes |
 |---|---|---|
-| `=` assignment | 26 | Requires path expression tracking |
-| `?//` alternative destructuring | 17 | Parser extension needed |
-| `\|=` update assignment | 14 | Requires path expression tracking |
-| `\(expr)` string interpolation | 10 | Lexer rework needed |
-| `as [$a,$b]` destructuring bind | 9 | Pattern matching extension |
-| `import/include` | 9 | Module system |
-| `path()` expression | 8 | Path tracking |
-| `label/break` | 6 | Non-local control flow |
-| `setpath` | 6 | Path mutation |
-| `del()` | 5 | Path mutation |
-| `as {$a}` destructuring bind | 4 | Pattern matching extension |
-| `pick()` | 4 | Path tracking |
-| `delpaths()` | 3 | Path mutation |
-| Other | 8 | `@csv`, `@tsv`, `@sh`, `utf8bytelength`, `$__loc__`, `input` |
+| `import/include` | 10 | Module system (out of scope) |
+| `input` | 1 | Multi-input I/O |
 
-See [TODO.md](TODO.md) for details.
+### Remaining Incompatibilities (10 of 262 tested)
 
-### Known Precision Limits
+All caused by platform constraints (IEEE 754 double / JS string handling):
 
-- Integers > 2^53 overflow to `Infinity` (IEEE 754 double)
-- `-0` outputs as `0`
-- `contains` with NUL bytes may be inaccurate (JS string handling)
-- `fromjson` error messages differ from jq
+| Issue | Tests | Detail |
+|---|---|---|
+| Large integers > 2^53 | 4 | Overflow to `Infinity` instead of exact representation |
+| `-0` handling | 1 | `abs` on `-0.0` outputs `0` instead of `-0` |
+| NUL byte (`\u0000`) in strings | 2 | `contains` and `toboolean` misbehave with embedded NUL |
+| `path()` error message | 1 | Missing result value in error message |
+| `pick(last)` negative index | 1 | Different error from jq |
+| `fromjson` error message | 1 | MoonBit JSON parser produces different error text |
 
 ## Quick Commands
 
