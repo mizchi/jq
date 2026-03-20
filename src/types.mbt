@@ -34,6 +34,7 @@ priv enum Token {
   Minus
   Star
   Slash
+  SlashSlash
   Percent
   KwAnd
   KwOr
@@ -48,6 +49,7 @@ priv enum Token {
   KwTry
   KwCatch
   KwReduce
+  KwForeach
   KwTrue
   KwFalse
   KwNull
@@ -112,4 +114,6 @@ pub enum Filter {
   Compare(CmpOp, Filter, Filter)
   LogicAnd(Filter, Filter)
   LogicOr(Filter, Filter)
+  Alternative(Filter, Filter)
+  Foreach(Filter, String, Filter, Filter, Filter?)
 } derive(Show)

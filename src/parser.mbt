@@ -70,7 +70,7 @@ fn Parser::parse_comma(self : Parser) -> Filter raise JqError {
 
 ///|
 fn Parser::parse_binding(self : Parser) -> Filter raise JqError {
-  let expr = self.parse_or()
+  let expr = self.parse_alternative()
   if self.peek() == KwAs {
     ignore(self.advance())
     let var_tok = self.advance()
@@ -83,6 +83,18 @@ fn Parser::parse_binding(self : Parser) -> Filter raise JqError {
     Binding("$" + var_name, expr, body)
   } else {
     expr
+  }
+}
+
+///|
+fn Parser::parse_alternative(self : Parser) -> Filter raise JqError {
+  let left = self.parse_or()
+  if self.peek() == SlashSlash {
+    ignore(self.advance())
+    let right = self.parse_alternative()
+    Alternative(left, right)
+  } else {
+    left
   }
 }
 
@@ -515,6 +527,10 @@ fn Parser::parse_primary(self : Parser) -> Filter raise JqError {
       ignore(self.advance())
       self.parse_reduce()
     }
+    KwForeach => {
+      ignore(self.advance())
+      self.parse_foreach()
+    }
     KwDef => {
       ignore(self.advance())
       self.parse_def()
@@ -681,6 +697,29 @@ fn Parser::parse_reduce(self : Parser) -> Filter raise JqError {
   let update = self.parse_pipe()
   self.expect(RParen)
   Reduce(iter_expr, "$" + var_name, init, update)
+}
+
+///|
+fn Parser::parse_foreach(self : Parser) -> Filter raise JqError {
+  let iter_expr = self.parse_postfix()
+  self.expect(KwAs)
+  let var_tok = self.advance()
+  let var_name = match var_tok {
+    Variable(name) => name
+    _ => raise JqError("expected variable after 'as' in foreach")
+  }
+  self.expect(LParen)
+  let init = self.parse_pipe()
+  self.expect(Semicolon)
+  let update = self.parse_pipe()
+  let extract : Filter? = if self.peek() == Semicolon {
+    ignore(self.advance())
+    Some(self.parse_pipe())
+  } else {
+    None
+  }
+  self.expect(RParen)
+  Foreach(iter_expr, "$" + var_name, init, update, extract)
 }
 
 ///|

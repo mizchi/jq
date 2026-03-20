@@ -289,7 +289,7 @@ fn eval(
         yield_(r)
       }
       match caught_msg {
-        Some(msg) => eval(handler, Json::string(msg), env, yield_)
+        Some(msg) => eval(handler, jq_error_decode(msg), env, yield_)
         None => ()
       }
     }
@@ -454,6 +454,32 @@ fn eval(
           eval(right, input, env, rv => yield_(Json::boolean(is_truthy(rv))))
         }
       })
+    Alternative(left, right) => {
+      let mut has_result = false
+      eval(left, input, env, v => {
+        if is_truthy(v) {
+          has_result = true
+          yield_(v)
+        }
+      })
+      if not(has_result) {
+        eval(right, input, env, yield_)
+      }
+    }
+    Foreach(iter_expr, var_name, init, update, extract) => {
+      let mut acc = eval_single(init, input, env)
+      eval(iter_expr, input, env, v => {
+        let new_env = env.bind_var(var_name, v)
+        acc = eval_single(update, acc, new_env)
+        match extract {
+          Some(ext) => {
+            let new_env2 = env.bind_var(var_name, v)
+            eval(ext, acc, new_env2, yield_)
+          }
+          None => yield_(acc)
+        }
+      })
+    }
   }
 }
 

@@ -350,3 +350,26 @@ fn walk_impl(
     _ => eval(f, input, env, yield_)
   }
 }
+
+///|
+let jq_error_prefix : String = "\u0000json:"
+
+///|
+fn jq_error_encode(v : Json) -> String {
+  match v {
+    String(s) => s
+    _ => jq_error_prefix + v.stringify()
+  }
+}
+
+///|
+fn jq_error_decode(msg : String) -> Json {
+  if msg.has_prefix(jq_error_prefix) {
+    let json_str = msg.view(start_offset=jq_error_prefix.length())
+    @json.parse(json_str) catch {
+      _ => Json::string(msg)
+    }
+  } else {
+    Json::string(msg)
+  }
+}

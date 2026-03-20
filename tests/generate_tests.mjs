@@ -12,11 +12,8 @@ const UNSUPPORTED_PATTERNS = [
   /\?\/\//, // alternative destructuring operator
   /\bas\s+\[/, // destructuring as [$a, $b]
   /\bas\s+\{/, // destructuring as {$a}
-  /\bwhile\b/, // while
-  /\buntil\b/, // until
   /\blabel\b/, // label
   /\bbreak\b/, // break
-  /\bforeach\b/, // foreach
   /\bdel\b/, // del()
   /\bsetpath\b/, // setpath()
   /\bdelpaths\b/, // delpaths()
@@ -25,10 +22,6 @@ const UNSUPPORTED_PATTERNS = [
   /\|=/, // update assignment
   /\/\/=/, // alternative assignment
   /[^=!<>]=(?!=)/, // assignment (but not ==, !=, <=, >=)
-  /\/\/(?!\/)/, // alternative operator //
-  /\berror\b/, // error()
-  /\bskip\b/, // skip()
-  /\bnth\b/, // nth()
   /\bsqrt\b/, // sqrt()
   /\bsin\b/, // sin()
   /\bcos\b/, // cos()
@@ -39,23 +32,16 @@ const UNSUPPORTED_PATTERNS = [
   /\bfenv\b/, // fenv
   /\binfinite\b/i, // infinite/Infinity
   /\bnan\b/i, // nan/NaN
-  /\btoboolean\b/, // toboolean
   /\butf8bytelength\b/, // utf8bytelength
   /\bpath\b/, // path()
-  /\bpaths\b/, // paths
   /\benv\b/, // env
   /\bbuiltins\b/, // builtins
-  /\blast\(/, // last( with args  - complex version
-  /\blimit\(0/, // limit(0; error) edge case
   /\bascii\b(?!_)/, // ascii (not ascii_downcase/upcase)
   /\b__loc__\b/, // __loc__
-  /\btry\s+error\b/, // try error
   /\brecurse_down\b/, // deprecated
   /\binput\b/, // input
   /\bdebug\b/, // debug
   /\b\$__loc__\b/, // $__loc__
-  /\bisempty\b/, // isempty
-  /\blimit\(\d+;\s*\.?\[\]/, // complex limit
   /\bformat\b/, // format
   /\bmodulename\b/, // modules
   /\bimport\b/, // import
@@ -142,7 +128,7 @@ function isSupported(test) {
   if (test.expected.some((e) => e.includes("Cannot") || e.includes("error"))) return false;
   // Skip if filter contains features we can't handle
   if (test.filter.includes("|=")) return false;
-  if (test.filter.includes("//") && !test.filter.includes("//=")) return false;
+  // //= is handled in UNSUPPORTED_PATTERNS already
   // Skip array subtraction
   if (/\]\s*-\s*\[/.test(test.filter)) return false;
   // Skip .e0, .E1 style (scientific notation field names)

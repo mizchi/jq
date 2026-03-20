@@ -828,6 +828,9 @@ fn eval_builtin(
         match nv {
           Number(n, ..) => {
             let max = n.to_int()
+            if max < 0 {
+              raise JqError("limit doesn't support negative count")
+            }
             let mut count = 0
             eval(args[1], input, env, v => {
               if count < max {
@@ -951,14 +954,78 @@ fn eval_builtin(
     "inputs" => raise JqError("inputs not supported")
     "path" => raise JqError("path not yet implemented")
     "paths" =>
-      match input {
-        Array(arr) =>
-          for i = 0; i < arr.length(); i = i + 1 {
-            yield_(Json::array([Json::number(i.to_double())]))
+      if args.length() == 1 {
+        // paths(f) - return paths where f is truthy
+        let f = args[0]
+        fn collect_paths_filter(
+          v : Json,
+          prefix : Array[Json],
+          f : Filter,
+          env : Scope,
+          yield_ : (Json) -> Unit raise JqError,
+        ) -> Unit raise JqError {
+          match v {
+            Array(arr) =>
+              for i = 0; i < arr.length(); i = i + 1 {
+                let p = prefix.copy()
+                p.push(Json::number(i.to_double()))
+                let mut is_truthy_result = false
+                eval(f, arr[i], env, fv => {
+                  if is_truthy(fv) {
+                    is_truthy_result = true
+                  }
+                })
+                if is_truthy_result {
+                  yield_(Json::array(p))
+                }
+                collect_paths_filter(arr[i], p, f, env, yield_)
+              }
+            Object(map) =>
+              map.each((k, val) => {
+                let p = prefix.copy()
+                p.push(Json::string(k))
+                let mut is_truthy_result = false
+                eval(f, val, env, fv => {
+                  if is_truthy(fv) {
+                    is_truthy_result = true
+                  }
+                })
+                if is_truthy_result {
+                  yield_(Json::array(p))
+                }
+                collect_paths_filter(val, p, f, env, yield_)
+              })
+            _ => ()
           }
-        Object(map) =>
-          map.each((k, _v) => yield_(Json::array([Json::string(k)])))
-        _ => ()
+        }
+
+        collect_paths_filter(input, [], f, env, yield_)
+      } else {
+        fn collect_paths(
+          v : Json,
+          prefix : Array[Json],
+          yield_ : (Json) -> Unit raise JqError,
+        ) -> Unit raise JqError {
+          match v {
+            Array(arr) =>
+              for i = 0; i < arr.length(); i = i + 1 {
+                let p = prefix.copy()
+                p.push(Json::number(i.to_double()))
+                yield_(Json::array(p))
+                collect_paths(arr[i], p, yield_)
+              }
+            Object(map) =>
+              map.each((k, val) => {
+                let p = prefix.copy()
+                p.push(Json::string(k))
+                yield_(Json::array(p))
+                collect_paths(val, p, yield_)
+              })
+            _ => ()
+          }
+        }
+
+        collect_paths(input, [], yield_)
       }
     "getpath" => {
       guard args.length() == 1 else {
@@ -1463,6 +1530,141 @@ fn eval_builtin(
         }
         yield_(Json::boolean(found))
       }
+    "error" =>
+      if args.length() == 0 {
+        raise JqError(jq_error_encode(input))
+      } else {
+        eval(args[0], input, env, v => raise JqError(jq_error_encode(v)))
+      }
+    "isempty" => {
+      guard args.length() == 1 else {
+        raise JqError("isempty takes 1 argument")
+      }
+      let mut found = false
+      eval(args[0], input, env, _ => {
+        found = true
+        raise JqError("__break__")
+      }) catch {
+        JqError("__break__") => ()
+        e => raise e
+      }
+      yield_(Json::boolean(not(found)))
+    }
+    "nth" =>
+      if args.length() == 2 {
+        eval(args[0], input, env, nv => {
+          match nv {
+            Number(n, ..) => {
+              let target = n.to_int()
+              if target < 0 {
+                raise JqError("nth doesn't support negative indices")
+              }
+              let mut count = 0
+              eval(args[1], input, env, v => {
+                if count == target {
+                  yield_(v)
+                  raise JqError("__break__")
+                }
+                count += 1
+              }) catch {
+                JqError("__break__") => ()
+                e => raise e
+              }
+            }
+            _ => raise JqError("nth: index must be a number")
+          }
+        })
+      } else if args.length() == 1 {
+        // nth(n) = first(.[n:] | .[0]) — but simpler: get nth output of .[]
+        eval(args[0], input, env, nv => {
+          match nv {
+            Number(n, ..) => {
+              let target = n.to_int()
+              match input {
+                Array(arr) =>
+                  if target >= 0 && target < arr.length() {
+                    yield_(arr[target])
+                  } else {
+                    yield_(Json::null())
+                  }
+                _ => raise JqError("nth requires array input")
+              }
+            }
+            _ => raise JqError("nth: index must be a number")
+          }
+        })
+      } else {
+        raise JqError("nth takes 1 or 2 arguments")
+      }
+    "skip" => {
+      guard args.length() == 2 else { raise JqError("skip takes 2 arguments") }
+      eval(args[0], input, env, nv => {
+        match nv {
+          Number(n, ..) => {
+            let target = n.to_int()
+            if target < 0 {
+              raise JqError("skip doesn't support negative count")
+            }
+            let mut count = 0
+            eval(args[1], input, env, v => {
+              if count >= target {
+                yield_(v)
+              }
+              count += 1
+            })
+          }
+          _ => raise JqError("skip: first argument must be a number")
+        }
+      })
+    }
+    "toboolean" =>
+      match input {
+        True | False => yield_(input)
+        String(s) =>
+          match s {
+            "true" => yield_(Json::boolean(true))
+            "false" => yield_(Json::boolean(false))
+            _ =>
+              raise JqError(
+                "string (" +
+                input.stringify() +
+                ") cannot be parsed as a boolean",
+              )
+          }
+        _ =>
+          raise JqError(
+            json_type(input) +
+            " (" +
+            input.stringify() +
+            ") cannot be parsed as a boolean",
+          )
+      }
+    "while" => {
+      guard args.length() == 2 else { raise JqError("while takes 2 arguments") }
+      let cond = args[0]
+      let update = args[1]
+      let mut current = input
+      while true {
+        if not(is_truthy(eval_single(cond, current, env))) {
+          break
+        }
+        yield_(current)
+        current = eval_single(update, current, env)
+      }
+    }
+    "until" => {
+      guard args.length() == 2 else { raise JqError("until takes 2 arguments") }
+      let cond = args[0]
+      let update = args[1]
+      let mut current = input
+      while true {
+        if is_truthy(eval_single(cond, current, env)) {
+          break
+        }
+        current = eval_single(update, current, env)
+      }
+      yield_(current)
+    }
     _ => raise JqError("unknown function: " + name)
   }
 }

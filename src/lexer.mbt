@@ -14,6 +14,7 @@ fn keyword_or_ident(name : String) -> Token {
     "try" => KwTry
     "catch" => KwCatch
     "reduce" => KwReduce
+    "foreach" => KwForeach
     "true" => KwTrue
     "false" => KwFalse
     "null" => KwNull
@@ -105,10 +106,14 @@ fn tokenize(input : String) -> Array[Token] raise JqError {
         tokens.push(Star)
         pos += 1
       }
-      '/' => {
-        tokens.push(Slash)
-        pos += 1
-      }
+      '/' =>
+        if pos + 1 < len && chars[pos + 1] == '/' {
+          tokens.push(SlashSlash)
+          pos += 2
+        } else {
+          tokens.push(Slash)
+          pos += 1
+        }
       '%' => {
         tokens.push(Percent)
         pos += 1
