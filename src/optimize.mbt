@@ -81,6 +81,10 @@ fn optimize(filter : Filter) -> Filter {
       Update(optimize(path_expr), optimize(update_filter))
     UpdateAlt(path_expr, value_expr) =>
       UpdateAlt(optimize(path_expr), optimize(value_expr))
+    Label(name, body) => Label(name, optimize(body))
+    Break(_) => filter
+    BindingAlt(patterns, expr, body) =>
+      BindingAlt(patterns, optimize(expr), optimize(body))
     _ => filter
   }
 }

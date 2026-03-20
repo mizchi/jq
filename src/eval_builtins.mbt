@@ -9,6 +9,13 @@ fn eval_func_call(
 ) -> Unit raise JqError {
   // Check variable reference
   if name.has_prefix("$") {
+    if name == "$__loc__" {
+      let m : Map[String, Json] = Map::new()
+      m["file"] = Json::string("<top-level>")
+      m["line"] = Json::number(1.0)
+      yield_(Json::object(m))
+      return
+    }
     match env.get_var(name) {
       Some(v) => {
         yield_(v)
@@ -1181,6 +1188,18 @@ fn eval_builtin(
         Number(n, ..) =>
           yield_(Json::string(n.to_int().unsafe_to_char().to_string()))
         _ => raise JqError("ascii requires number input")
+      }
+    "utf8bytelength" =>
+      match input {
+        String(s) =>
+          yield_(Json::number(string_to_utf8(s).length().to_double()))
+        _ =>
+          raise JqError(
+            json_type(input) +
+            " (" +
+            input.stringify() +
+            ") only strings have UTF-8 byte length",
+          )
       }
     "explode" =>
       match input {

@@ -18,6 +18,8 @@ fn keyword_or_ident(name : String) -> Token {
     "true" => KwTrue
     "false" => KwFalse
     "null" => KwNull
+    "label" => KwLabel
+    "break" => KwBreak
     _ => Ident(name)
   }
 }

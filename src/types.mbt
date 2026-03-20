@@ -69,6 +69,8 @@ priv enum Token {
   KwTrue
   KwFalse
   KwNull
+  KwLabel
+  KwBreak
   Eof
 } derive(Show, Eq)
 
@@ -144,4 +146,7 @@ pub enum Filter {
   Assign(Filter, Filter)
   Update(Filter, Filter)
   UpdateAlt(Filter, Filter)
+  Label(String, Filter)
+  Break(String)
+  BindingAlt(Array[Pattern], Filter, Filter)
 } derive(Show)

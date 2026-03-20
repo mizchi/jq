@@ -8,16 +8,10 @@ const lines = content.split("\n");
 // Features we DON'T support - skip tests containing these patterns
 const UNSUPPORTED_PATTERNS = [
   /@(urid|csv|tsv|sh)\b/, // unsupported format strings
-  /\?\/\//, // alternative destructuring operator
-  /\blabel\b/, // label
-  /\bbreak\b/, // break
   /\bfenv\b/, // fenv
-  /\butf8bytelength\b/, // utf8bytelength
   /\benv\b/, // env
-  /\b__loc__\b/, // __loc__
   /\brecurse_down\b/, // deprecated
   /\binput\b/, // input
-  /\b\$__loc__\b/, // $__loc__
   /\bformat\b/, // format
   /\bmodulename\b/, // modules
   /\bimport\b/, // import

@@ -408,6 +408,66 @@ fn bind_pattern(env : Scope, pattern : Pattern, value : Json) -> Scope {
 }
 
 ///|
+/// Strict version of bind_pattern that raises errors on type mismatches.
+/// Used by BindingAlt (?//) to detect when a pattern doesn't match.
+fn bind_pattern_strict(
+  env : Scope,
+  pattern : Pattern,
+  value : Json,
+) -> Scope raise JqError {
+  match pattern {
+    PatVar(name) => env.bind_var(name, value)
+    PatArray(pats) => {
+      let arr = match value {
+        Array(a) => a
+        _ =>
+          raise JqError("cannot destructure " + json_type(value) + " as array")
+      }
+      let mut new_env = env
+      for i = 0; i < pats.length(); i = i + 1 {
+        let v = if i < arr.length() { arr[i] } else { Json::null() }
+        new_env = bind_pattern_strict(new_env, pats[i], v)
+      }
+      new_env
+    }
+    PatObject(fields) => {
+      let map : Map[String, Json] = match value {
+        Object(m) => m
+        _ =>
+          raise JqError("cannot destructure " + json_type(value) + " as object")
+      }
+      let mut new_env = env
+      for field in fields {
+        let (key, pat) = field
+        let v = match map.get(key) {
+          Some(v) => v
+          None => Json::null()
+        }
+        new_env = bind_pattern_strict(new_env, pat, v)
+      }
+      new_env
+    }
+  }
+}
+
+///|
+/// Collect all variable names from a pattern.
+fn collect_pattern_vars(pattern : Pattern, vars : Array[String]) -> Unit {
+  match pattern {
+    PatVar(name) => vars.push(name)
+    PatArray(pats) =>
+      for pat in pats {
+        collect_pattern_vars(pat, vars)
+      }
+    PatObject(fields) =>
+      for field in fields {
+        let (_key, pat) = field
+        collect_pattern_vars(pat, vars)
+      }
+  }
+}
+
+///|
 /// Convert a JSON value to its string representation for string interpolation.
 fn json_to_interp_string(v : Json) -> String {
   match v {

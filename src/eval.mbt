@@ -151,9 +151,16 @@ fn eval_single(
     }
     FuncCall(name, _args) =>
       if name.has_prefix("$") {
-        match env.get_var(name) {
-          Some(v) => v
-          None => raise JqError("undefined variable: " + name)
+        if name == "$__loc__" {
+          let m : Map[String, Json] = Map::new()
+          m["file"] = Json::string("<top-level>")
+          m["line"] = Json::number(1.0)
+          Json::object(m)
+        } else {
+          match env.get_var(name) {
+            Some(v) => v
+            None => raise JqError("undefined variable: " + name)
+          }
         }
       } else {
         // Fall back to callback eval for builtins
@@ -526,6 +533,45 @@ fn eval(
       }
       yield_(result)
     }
+    Label(name, body) => {
+      let tag = "__label_" + name
+      eval(body, input, env, yield_) catch {
+        JqError(msg) => if msg == tag { () } else { raise JqError(msg) }
+      }
+    }
+    Break(name) => raise JqError("__label_" + name)
+    BindingAlt(patterns, expr, body) =>
+      eval(expr, input, env, v => {
+        // Collect all variable names from all patterns
+        let all_vars : Array[String] = []
+        for pat in patterns {
+          collect_pattern_vars(pat, all_vars)
+        }
+        // Pre-bind all variables as null
+        let mut base_env = env
+        for var_name in all_vars {
+          base_env = base_env.bind_var(var_name, Json::null())
+        }
+        let mut succeeded = false
+        for i = 0; i < patterns.length(); i = i + 1 {
+          if not(succeeded) {
+            let results : Array[Json] = []
+            let mut had_error = false
+            (fn() -> Unit raise JqError {
+              let new_env = bind_pattern_strict(base_env, patterns[i], v)
+              eval(body, input, new_env, r => results.push(r))
+            })() catch {
+              JqError(_) => had_error = true
+            }
+            if not(had_error) {
+              succeeded = true
+              for r in results {
+                yield_(r)
+              }
+            }
+          }
+        }
+      })
     UpdateAlt(path_expr, value_expr) => {
       let mut result = input
       let paths : Array[Array[Json]] = []

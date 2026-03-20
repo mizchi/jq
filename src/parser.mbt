@@ -226,6 +226,8 @@ fn Parser::parse_pattern_field(
         KwTrue => "true"
         KwFalse => "false"
         KwNull => "null"
+        KwLabel => "label"
+        KwBreak => "break"
         _ => raise JqError("expected pattern field")
       }
       ignore(self.advance())
@@ -246,9 +248,26 @@ fn Parser::parse_binding(self : Parser) -> Filter raise JqError {
   if self.peek() == KwAs {
     ignore(self.advance())
     let pat = self.parse_pattern()
+    // Check for ?// alternative destructuring
+    let patterns : Array[Pattern] = [pat]
+    while self.peek() == Question {
+      let saved = self.pos
+      ignore(self.advance())
+      if self.peek() == SlashSlash {
+        ignore(self.advance())
+        patterns.push(self.parse_pattern())
+      } else {
+        self.pos = saved
+        break
+      }
+    }
     self.expect(Pipe)
     let body = self.parse_pipe()
-    Binding(pat, expr, body)
+    if patterns.length() == 1 {
+      Binding(pat, expr, body)
+    } else {
+      BindingAlt(patterns, expr, body)
+    }
   } else {
     expr
   }
@@ -717,6 +736,26 @@ fn Parser::parse_primary(self : Parser) -> Filter raise JqError {
     KwDef => {
       ignore(self.advance())
       self.parse_def()
+    }
+    KwLabel => {
+      ignore(self.advance())
+      let var_tok = self.advance()
+      let var_name = match var_tok {
+        Variable(n) => n
+        _ => raise JqError("expected variable after 'label'")
+      }
+      self.expect(Pipe)
+      let body = self.parse_pipe()
+      Label("$" + var_name, body)
+    }
+    KwBreak => {
+      ignore(self.advance())
+      let var_tok = self.advance()
+      let var_name = match var_tok {
+        Variable(n) => n
+        _ => raise JqError("expected variable after 'break'")
+      }
+      Break("$" + var_name)
     }
     KwNot => {
       ignore(self.advance())
