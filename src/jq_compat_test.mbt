@@ -611,7 +611,7 @@ test "jq_compat_59: [foreach .[] / .[] as $i (0; . + $i)]" {
   inspect(
     run_jq("[foreach .[] / .[] as $i (0; . + $i)]", "[1,2]"),
     content=(
-      #|["ERROR: expected KwAs but got Slash"]
+      #|["[1,1.5,3.5,4.5]"]
     ),
   )
 }
@@ -641,7 +641,7 @@ test "jq_compat_62: [limit(0; error)]" {
   inspect(
     run_jq("[limit(0; error)]", "\"badness\""),
     content=(
-      #|["ERROR: badness"]
+      #|["[]"]
     ),
   )
 }
@@ -857,7 +857,7 @@ test "jq_compat_83: del(.[2:4],.[0],.[-2:])" {
   inspect(
     run_jq("del(.[2:4],.[0],.[-2:])", "[0,1,2,3,4,5,6,7]"),
     content=(
-      #|["ERROR: Invalid path expression with result [2,3]"]
+      #|["[1,4,5]"]
     ),
   )
 }
@@ -869,7 +869,7 @@ test "jq_compat_84: .[2:4] = ([], [\"a\",\"b\"], [\"a\",\"b\",\"c\"])" {
       ".[2:4] = ([], [\"a\",\"b\"], [\"a\",\"b\",\"c\"])", "[0,1,2,3,4,5,6,7]",
     ),
     content=(
-      #|["ERROR: Invalid path expression with result [2,3]"]
+      #|["[0,1,[],[],4,5,6,7]", "[0,1,[\"a\",\"b\"],[\"a\",\"b\"],4,5,6,7]", "[0,1,[\"a\",\"b\",\"c\"],[\"a\",\"b\",\"c\"],4,5,6,7]"]
     ),
   )
 }
@@ -1801,7 +1801,7 @@ test "jq_compat_173: any(true, error; .)" {
   inspect(
     run_jq("any(true, error; .)", "\"badness\""),
     content=(
-      #|["ERROR: badness"]
+      #|["true"]
     ),
   )
 }
@@ -1811,7 +1811,7 @@ test "jq_compat_174: all(false, error; .)" {
   inspect(
     run_jq("all(false, error; .)", "\"badness\""),
     content=(
-      #|["ERROR: badness"]
+      #|["false"]
     ),
   )
 }
@@ -2065,7 +2065,7 @@ test "jq_compat_198: try delpaths(0) catch ." {
   inspect(
     run_jq("try delpaths(0) catch .", "{}"),
     content=(
-      #|["\"delpaths: argument must be an array of paths\""]
+      #|["\"Paths must be specified as an array\""]
     ),
   )
 }
@@ -2078,7 +2078,7 @@ test "jq_compat_199: del(.), del(empty), del((.foo,.bar,.baz) | .[2,3,0]), del(.
       "{\"foo\": [0,1,2,3,4], \"bar\": [0,1]}",
     ),
     content=(
-      #|["ERROR: Invalid path expression"]
+      #|["null", "{\"foo\":[0,1,2,3,4],\"bar\":[0,1]}", "{\"foo\":[1,4],\"bar\":[1]}", "{\"bar\":[1]}"]
     ),
   )
 }
@@ -2088,7 +2088,7 @@ test "jq_compat_200: del(.[1], .[-6], .[2], .[-3:9])" {
   inspect(
     run_jq("del(.[1], .[-6], .[2], .[-3:9])", "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]"),
     content=(
-      #|["ERROR: Invalid path expression with result [7,8]"]
+      #|["[0,3,5,6,9]"]
     ),
   )
 }
@@ -2138,7 +2138,7 @@ test "jq_compat_205: pick(first)" {
   inspect(
     run_jq("pick(first)", "[1,2]"),
     content=(
-      #|["ERROR: Invalid path expression"]
+      #|["[1]"]
     ),
   )
 }
@@ -2148,7 +2148,7 @@ test "jq_compat_206: pick(first|first)" {
   inspect(
     run_jq("pick(first|first)", "[[10,20],30]"),
     content=(
-      #|["ERROR: Invalid path expression"]
+      #|["[[10]]"]
     ),
   )
 }
@@ -2158,7 +2158,7 @@ test "jq_compat_207: try pick(last) catch ." {
   inspect(
     run_jq("try pick(last) catch .", "[1,2]"),
     content=(
-      #|["\"Invalid path expression\""]
+      #|["[null,2]"]
     ),
   )
 }
@@ -2198,7 +2198,7 @@ test "jq_compat_211: .[] += 2, .[] *= 2, .[] -= 2, .[] /= 2, .[] %=2" {
   inspect(
     run_jq(".[] += 2, .[] *= 2, .[] -= 2, .[] /= 2, .[] %=2", "[1,3,5]"),
     content=(
-      #|["ERROR: Invalid path expression with result 2"]
+      #|["[3,5,7]", "[2,6,10]", "[-1,1,3]", "[0.5,1.5,2.5]", "[1,1,1]"]
     ),
   )
 }
@@ -2218,7 +2218,7 @@ test "jq_compat_213: .foo += .foo" {
   inspect(
     run_jq(".foo += .foo", "{\"foo\":2}"),
     content=(
-      #|["ERROR: cannot index number with string"]
+      #|["{\"foo\":4}"]
     ),
   )
 }
@@ -2240,7 +2240,7 @@ test "jq_compat_215: def inc(x): x |= .+1; inc(.[].a)" {
       "def inc(x): x |= .+1; inc(.[].a)", "[{\"a\":1,\"b\":2},{\"a\":2,\"b\":4},{\"a\":7,\"b\":8}]",
     ),
     content=(
-      #|["ERROR: Invalid path expression"]
+      #|["[{\"a\":2,\"b\":2},{\"a\":3,\"b\":4},{\"a\":8,\"b\":8}]"]
     ),
   )
 }
@@ -2300,7 +2300,7 @@ test "jq_compat_221: def x: .[1,2]; x=10" {
   inspect(
     run_jq("def x: .[1,2]; x=10", "[0,1,2]"),
     content=(
-      #|["ERROR: Invalid path expression"]
+      #|["[0,10,10]"]
     ),
   )
 }
@@ -2477,7 +2477,7 @@ test "jq_compat_238: .[] //= .[0]" {
   inspect(
     run_jq(".[] //= .[0]", "[\"hello\",true,false,[false],null]"),
     content=(
-      #|["ERROR: cannot index boolean with number"]
+      #|["[\"hello\",true,\"hello\",[false],\"hello\"]"]
     ),
   )
 }
@@ -2667,7 +2667,7 @@ test "jq_compat_254: [.[]|try if . == 0 then error(\"foo\") elif . == 1 then .a 
       "[0,1,2,3]",
     ),
     content=(
-      #|["[\"foo\",\"cannot index number with string\",3]"]
+      #|["[\"foo\",\"Cannot index number with string \\\"a\\\"\",3]"]
     ),
   )
 }
@@ -3357,7 +3357,7 @@ test "jq_compat_318: has(nan)" {
   inspect(
     run_jq("has(nan)", "[0,1,2]"),
     content=(
-      #|["true"]
+      #|["false"]
     ),
   )
 }
@@ -3730,7 +3730,7 @@ test "jq_compat_354: INDEX(range(5)|[., \"foo\\(.)\"]; .[0])" {
   inspect(
     run_jq("INDEX(range(5)|[., \"foo\\(.)\"]; .[0])", "null"),
     content=(
-      #|["ERROR: unknown function: INDEX"]
+      #|["{\"0\":[0,\"foo0\"],\"1\":[1,\"foo1\"],\"2\":[2,\"foo2\"],\"3\":[3,\"foo3\"],\"4\":[4,\"foo4\"]}"]
     ),
   )
 }
@@ -3803,7 +3803,7 @@ test "jq_compat_361: (.a as $x | .b) = \"b\"" {
   inspect(
     run_jq("(.a as $x | .b) = \"b\"", "{\"a\":null,\"b\":null}"),
     content=(
-      #|["ERROR: Invalid path expression with result null"]
+      #|["{\"a\":null,\"b\":\"b\"}"]
     ),
   )
 }
@@ -4276,7 +4276,7 @@ test "jq_compat_404: try 0[implode] catch ." {
   inspect(
     run_jq("try 0[implode] catch .", "[]"),
     content=(
-      #|["\"cannot index number with string\""]
+      #|["\"Cannot index number with string \\\"\\\"\""]
     ),
   )
 }
@@ -4396,7 +4396,7 @@ test "jq_compat_416: [range(3)] | .[nan:1]" {
   inspect(
     run_jq("[range(3)] | .[nan:1]", "null"),
     content=(
-      #|["ERROR: expected RBracket but got Colon"]
+      #|["[0]"]
     ),
   )
 }
@@ -4507,7 +4507,7 @@ test "jq_compat_426: foreach .[] as $x (0, 1; . + $x)" {
   inspect(
     run_jq("foreach .[] as $x (0, 1; . + $x)", "[1, 2]"),
     content=(
-      #|["2", "4"]
+      #|["1", "3", "2", "4"]
     ),
   )
 }

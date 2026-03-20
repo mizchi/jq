@@ -418,7 +418,11 @@ fn eval_builtin(
         match (input, key) {
           (Object(map), String(k)) => yield_(Json::boolean(map.contains(k)))
           (Array(arr), Number(n, ..)) =>
-            yield_(Json::boolean(n.to_int() >= 0 && n.to_int() < arr.length()))
+            yield_(
+              Json::boolean(
+                not(n != n) && n.to_int() >= 0 && n.to_int() < arr.length(),
+              ),
+            )
           _ => raise JqError("has: invalid arguments")
         }
       })
@@ -459,9 +463,17 @@ fn eval_builtin(
         let mut found = false
         eval(gen, input, env, v => {
           if not(found) {
-            eval(cond, v, env, cv => if is_truthy(cv) { found = true })
+            eval(cond, v, env, cv => {
+              if is_truthy(cv) {
+                found = true
+                raise JqError("__break__")
+              }
+            })
           }
-        })
+        }) catch {
+          JqError("__break__") => ()
+          e => raise e
+        }
         yield_(Json::boolean(found))
       } else {
         raise JqError("any takes 0, 1, or 2 arguments")
@@ -502,9 +514,17 @@ fn eval_builtin(
         let mut ok = true
         eval(gen, input, env, v => {
           if ok {
-            eval(cond, v, env, cv => if not(is_truthy(cv)) { ok = false })
+            eval(cond, v, env, cv => {
+              if not(is_truthy(cv)) {
+                ok = false
+                raise JqError("__break__")
+              }
+            })
           }
-        })
+        }) catch {
+          JqError("__break__") => ()
+          e => raise e
+        }
         yield_(Json::boolean(ok))
       } else {
         raise JqError("all takes 0, 1, or 2 arguments")
@@ -838,18 +858,20 @@ fn eval_builtin(
             if max < 0 {
               raise JqError("limit doesn't support negative count")
             }
-            let mut count = 0
-            eval(args[1], input, env, v => {
-              if count < max {
-                yield_(v)
-                count += 1
+            if max > 0 {
+              let mut count = 0
+              eval(args[1], input, env, v => {
+                if count < max {
+                  yield_(v)
+                  count += 1
+                }
+                if count >= max {
+                  raise JqError("__break__")
+                }
+              }) catch {
+                JqError("__break__") => ()
+                e => raise e
               }
-              if count >= max {
-                raise JqError("__break__")
-              }
-            }) catch {
-              JqError("__break__") => ()
-              e => raise e
             }
           }
           _ => raise JqError("limit: first argument must be a number")
@@ -992,7 +1014,7 @@ fn eval_builtin(
             }
             yield_(delpaths_impl(input, paths))
           }
-          _ => raise JqError("delpaths: argument must be an array of paths")
+          _ => raise JqError("Paths must be specified as an array")
         }
       })
     }
@@ -1824,6 +1846,32 @@ fn eval_builtin(
       }
       yield_(current)
     }
+    "INDEX" =>
+      if args.length() == 2 {
+        let result : Map[String, Json] = Map::new()
+        eval(args[0], input, env, x => {
+          let key = eval_single(args[1], x, env)
+          match key {
+            String(k) => result[k] = x
+            Number(n, ..) => result[n.to_string()] = x
+            _ => result[key.stringify()] = x
+          }
+        })
+        yield_(Json::object(result))
+      } else if args.length() == 1 {
+        let result : Map[String, Json] = Map::new()
+        eval(Iterate, input, env, x => {
+          let key = eval_single(args[0], x, env)
+          match key {
+            String(k) => result[k] = x
+            Number(n, ..) => result[n.to_string()] = x
+            _ => result[key.stringify()] = x
+          }
+        })
+        yield_(Json::object(result))
+      } else {
+        raise JqError("INDEX takes 1 or 2 arguments")
+      }
     _ => raise JqError("unknown function: " + name)
   }
 }

@@ -55,59 +55,88 @@ fn Parser::parse_pipe(self : Parser) -> Filter raise JqError {
       let right = self.parse_pipe()
       Pipe(left, right)
     }
-    Eq => {
-      ignore(self.advance())
-      let right = self.parse_pipe()
-      Assign(left, right)
-    }
-    PipeEq => {
-      ignore(self.advance())
-      let right = self.parse_pipe()
-      Update(left, right)
-    }
-    PlusEq => {
-      ignore(self.advance())
-      let right = self.parse_pipe()
-      Update(left, Arith(ArithOp::Add, Identity, right))
-    }
-    MinusEq => {
-      ignore(self.advance())
-      let right = self.parse_pipe()
-      Update(left, Arith(ArithOp::Sub, Identity, right))
-    }
-    StarEq => {
-      ignore(self.advance())
-      let right = self.parse_pipe()
-      Update(left, Arith(ArithOp::Mul, Identity, right))
-    }
-    SlashEq => {
-      ignore(self.advance())
-      let right = self.parse_pipe()
-      Update(left, Arith(ArithOp::Div, Identity, right))
-    }
-    PercentEq => {
-      ignore(self.advance())
-      let right = self.parse_pipe()
-      Update(left, Arith(ArithOp::Mod, Identity, right))
-    }
-    SlashSlashEq => {
-      ignore(self.advance())
-      let right = self.parse_pipe()
-      UpdateAlt(left, right)
-    }
     _ => left
   }
 }
 
 ///|
 fn Parser::parse_comma(self : Parser) -> Filter raise JqError {
-  let mut left = self.parse_binding()
+  let mut left = self.parse_assign()
   while self.peek() == Comma {
     ignore(self.advance())
-    let right = self.parse_binding()
+    let right = self.parse_assign()
     left = Comma(left, right)
   }
   left
+}
+
+///|
+fn Parser::parse_assign(self : Parser) -> Filter raise JqError {
+  let left = self.parse_binding()
+  match self.peek() {
+    Eq => {
+      ignore(self.advance())
+      let right = self.parse_assign()
+      Assign(left, right)
+    }
+    PipeEq => {
+      ignore(self.advance())
+      let right = self.parse_assign()
+      Update(left, right)
+    }
+    PlusEq => {
+      ignore(self.advance())
+      let right = self.parse_assign()
+      // X += Y  =>  (Y) as $__rhs__ | X |= (. + $__rhs__)
+      Binding(
+        PatVar("$__rhs__"),
+        right,
+        Update(left, Arith(ArithOp::Add, Identity, FuncCall("$__rhs__", []))),
+      )
+    }
+    MinusEq => {
+      ignore(self.advance())
+      let right = self.parse_assign()
+      Binding(
+        PatVar("$__rhs__"),
+        right,
+        Update(left, Arith(ArithOp::Sub, Identity, FuncCall("$__rhs__", []))),
+      )
+    }
+    StarEq => {
+      ignore(self.advance())
+      let right = self.parse_assign()
+      Binding(
+        PatVar("$__rhs__"),
+        right,
+        Update(left, Arith(ArithOp::Mul, Identity, FuncCall("$__rhs__", []))),
+      )
+    }
+    SlashEq => {
+      ignore(self.advance())
+      let right = self.parse_assign()
+      Binding(
+        PatVar("$__rhs__"),
+        right,
+        Update(left, Arith(ArithOp::Div, Identity, FuncCall("$__rhs__", []))),
+      )
+    }
+    PercentEq => {
+      ignore(self.advance())
+      let right = self.parse_assign()
+      Binding(
+        PatVar("$__rhs__"),
+        right,
+        Update(left, Arith(ArithOp::Mod, Identity, FuncCall("$__rhs__", []))),
+      )
+    }
+    SlashSlashEq => {
+      ignore(self.advance())
+      let right = self.parse_assign()
+      UpdateAlt(left, right)
+    }
+    _ => left
+  }
 }
 
 ///|
@@ -619,8 +648,21 @@ fn Parser::parse_bracket_suffix(self : Parser) -> Filter raise JqError {
     }
     _ => {
       let expr = self.parse_pipe()
-      self.expect(RBracket)
-      DynIndex(expr)
+      if self.peek() == Colon {
+        // .[expr:end] dynamic slice
+        ignore(self.advance())
+        if self.peek() == RBracket {
+          ignore(self.advance())
+          DynSlice(Identity, Some(expr), None)
+        } else {
+          let end_expr = self.parse_pipe()
+          self.expect(RBracket)
+          DynSlice(Identity, Some(expr), Some(end_expr))
+        }
+      } else {
+        self.expect(RBracket)
+        DynIndex(expr)
+      }
     }
   }
 }
@@ -948,7 +990,7 @@ fn Parser::parse_reduce(self : Parser) -> Filter raise JqError {
 
 ///|
 fn Parser::parse_foreach(self : Parser) -> Filter raise JqError {
-  let iter_expr = self.parse_postfix()
+  let iter_expr = self.parse_mul()
   self.expect(KwAs)
   let pat = self.parse_pattern()
   self.expect(LParen)

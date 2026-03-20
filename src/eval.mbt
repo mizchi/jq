@@ -91,7 +91,10 @@ fn eval_single(
             None => Json::null()
           }
         Null => Json::null()
-        _ => raise JqError("cannot index " + json_type(input) + " with string")
+        _ =>
+          raise JqError(
+            "Cannot index " + json_type(input) + " with string \"" + name + "\"",
+          )
       }
     Index(i) =>
       match input {
@@ -103,7 +106,14 @@ fn eval_single(
             Json::null()
           }
         }
-        _ => raise JqError("cannot index " + json_type(input) + " with number")
+        _ =>
+          raise JqError(
+            "Cannot index " +
+            json_type(input) +
+            " with number (" +
+            i.to_string() +
+            ")",
+          )
       }
     Literal(v) => v
     Pipe(left, right) => eval_single(right, eval_single(left, input, env), env)
@@ -196,7 +206,10 @@ fn eval(
             None => yield_(Json::null())
           }
         Null => yield_(Json::null())
-        _ => raise JqError("cannot index " + json_type(input) + " with string")
+        _ =>
+          raise JqError(
+            "Cannot index " + json_type(input) + " with string \"" + name + "\"",
+          )
       }
     Index(i) =>
       match input {
@@ -208,7 +221,14 @@ fn eval(
             yield_(Json::null())
           }
         }
-        _ => raise JqError("cannot index " + json_type(input) + " with number")
+        _ =>
+          raise JqError(
+            "Cannot index " +
+            json_type(input) +
+            " with number (" +
+            i.to_string() +
+            ")",
+          )
       }
     Slice(start, end) =>
       match input {
@@ -474,20 +494,21 @@ fn eval(
         eval(right, input, env, yield_)
       }
     }
-    Foreach(iter_expr, pat, init, update, extract) => {
-      let mut acc = eval_single(init, input, env)
-      eval(iter_expr, input, env, v => {
-        let new_env = bind_pattern(env, pat, v)
-        acc = eval_single(update, acc, new_env)
-        match extract {
-          Some(ext) => {
-            let new_env2 = bind_pattern(env, pat, v)
-            eval(ext, acc, new_env2, yield_)
+    Foreach(iter_expr, pat, init, update, extract) =>
+      eval(init, input, env, init_val => {
+        let mut acc = init_val
+        eval(iter_expr, input, env, v => {
+          let new_env = bind_pattern(env, pat, v)
+          acc = eval_single(update, acc, new_env)
+          match extract {
+            Some(ext) => {
+              let new_env2 = bind_pattern(env, pat, v)
+              eval(ext, acc, new_env2, yield_)
+            }
+            None => yield_(acc)
           }
-          None => yield_(acc)
-        }
+        })
       })
-    }
     StringInterp(parts) => {
       let buf = StringBuilder::new()
       for part in parts {
@@ -579,7 +600,7 @@ fn eval(
       for p in paths {
         let current = getpath_impl(result, p)
         if not(is_truthy(current)) {
-          let new_val = eval_single(value_expr, current, env)
+          let new_val = eval_single(value_expr, input, env)
           result = setpath_impl(result, p, new_val)
         }
       }
@@ -658,7 +679,12 @@ fn dyn_index_impl(
     (Null, _) => yield_(Json::null())
     _ =>
       raise JqError(
-        "cannot index " + json_type(base) + " with " + json_type(idx),
+        "Cannot index " +
+        json_type(base) +
+        " with " +
+        json_type(idx) +
+        " " +
+        idx.stringify(),
       )
   }
 }

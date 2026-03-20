@@ -65,7 +65,83 @@ fn eval_path(
           yield_(full)
         })
       })
+    Slice(start, end) =>
+      match input {
+        Array(arr) => {
+          let len = arr.length()
+          let s = match start {
+            Some(v) => if v < 0 { len + v } else { v }
+            None => 0
+          }
+          let e = match end {
+            Some(v) => if v < 0 { len + v } else { v }
+            None => len
+          }
+          for i = s; i < e && i < len; i = i + 1 {
+            if i >= 0 {
+              yield_([Json::number(i.to_double())])
+            }
+          }
+        }
+        _ => raise JqError("cannot slice " + json_type(input))
+      }
+    DynSlice(base, start_expr, end_expr) => {
+      let base_val = match base {
+        Identity => input
+        _ => eval_single(base, input, env)
+      }
+      match base_val {
+        Array(arr) => {
+          let len = arr.length()
+          let s : Int = match start_expr {
+            Some(se) => {
+              let sv = eval_single(se, input, env)
+              match sv {
+                Number(n, ..) => {
+                  let v = n.to_int()
+                  if v < 0 {
+                    len + v
+                  } else {
+                    v
+                  }
+                }
+                _ => raise JqError("slice index must be a number")
+              }
+            }
+            None => 0
+          }
+          let e : Int = match end_expr {
+            Some(ee) => {
+              let ev = eval_single(ee, input, env)
+              match ev {
+                Number(n, ..) => {
+                  let v = n.to_int()
+                  if v < 0 {
+                    len + v
+                  } else {
+                    v
+                  }
+                }
+                _ => raise JqError("slice index must be a number")
+              }
+            }
+            None => len
+          }
+          for i = s; i < e && i < len; i = i + 1 {
+            if i >= 0 {
+              yield_([Json::number(i.to_double())])
+            }
+          }
+        }
+        _ => raise JqError("cannot slice " + json_type(base_val))
+      }
+    }
     Paren(inner) => eval_path(inner, input, env, yield_)
+    Binding(pat, expr, body) =>
+      eval(expr, input, env, v => {
+        let new_env = bind_pattern(env, pat, v)
+        eval_path(body, input, new_env, yield_)
+      })
     FuncCall(name, args) =>
       if name == "recurse" {
         recurse_paths(input, [], yield_)
@@ -81,7 +157,49 @@ fn eval_path(
         }
       } else if name == "select" && args.length() == 1 {
         eval(args[0], input, env, v => if is_truthy(v) { yield_([]) })
+      } else if name == "empty" {
+        // empty produces no paths
+        ()
+      } else if name == "first" && args.length() == 0 {
+        eval_path(Index(0), input, env, yield_)
+      } else if name == "last" && args.length() == 0 {
+        match input {
+          Array(arr) =>
+            if arr.length() > 0 {
+              eval_path(Index(arr.length() - 1), input, env, yield_)
+            }
+          _ => raise JqError("cannot get last of " + json_type(input))
+        }
+      } else if name == "first" && args.length() == 1 {
+        // first(expr) - path of first output of expr
+        let mut done = false
+        eval_path(args[0], input, env, p => {
+          if not(done) {
+            done = true
+            yield_(p)
+          }
+        })
       } else {
+        // Try filter arg reference
+        match env.get_filter_arg(name) {
+          Some(f) => {
+            eval_path(f, input, env, yield_)
+            return
+          }
+          None => ()
+        }
+        // Try user-defined function
+        match env.get_func(name) {
+          Some((params, body)) => {
+            let mut new_env = env
+            for i = 0; i < params.length() && i < args.length(); i = i + 1 {
+              new_env = new_env.bind_filter_arg(params[i], args[i])
+            }
+            eval_path(body, input, new_env, yield_)
+            return
+          }
+          None => ()
+        }
         raise JqError("Invalid path expression")
       }
     _ =>
