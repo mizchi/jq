@@ -22,25 +22,13 @@ const UNSUPPORTED_PATTERNS = [
   /\|=/, // update assignment
   /\/\/=/, // alternative assignment
   /[^=!<>]=(?!=)/, // assignment (but not ==, !=, <=, >=)
-  /\bsqrt\b/, // sqrt()
-  /\bsin\b/, // sin()
-  /\bcos\b/, // cos()
-  /\batan\b/, // atan()
-  /\blog\b/, // log()
-  /\bexp\b/, // exp()
-  /\bpow\b/, // pow()
   /\bfenv\b/, // fenv
-  /\binfinite\b/i, // infinite/Infinity
-  /\bnan\b/i, // nan/NaN
   /\butf8bytelength\b/, // utf8bytelength
   /\bpath\b/, // path()
   /\benv\b/, // env
-  /\bbuiltins\b/, // builtins
-  /\bascii\b(?!_)/, // ascii (not ascii_downcase/upcase)
   /\b__loc__\b/, // __loc__
   /\brecurse_down\b/, // deprecated
   /\binput\b/, // input
-  /\bdebug\b/, // debug
   /\b\$__loc__\b/, // $__loc__
   /\bformat\b/, // format
   /\bmodulename\b/, // modules
@@ -124,13 +112,9 @@ function isSupported(test) {
   // Skip tests with embedded unicode escapes in expected output that differ from input
   // Skip tests with very long expected outputs (complex)
   if (test.expected.some((e) => e.length > 200)) return false;
-  // Skip multi-output tests that use error
-  if (test.expected.some((e) => e.includes("Cannot") || e.includes("error"))) return false;
   // Skip if filter contains features we can't handle
   if (test.filter.includes("|=")) return false;
   // //= is handled in UNSUPPORTED_PATTERNS already
-  // Skip array subtraction
-  if (/\]\s*-\s*\[/.test(test.filter)) return false;
   // Skip .e0, .E1 style (scientific notation field names)
   if (/\.E[+-]?\d/.test(test.filter)) return false;
   // Skip def with complex recursive/nested patterns

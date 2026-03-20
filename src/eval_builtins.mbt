@@ -1420,7 +1420,95 @@ fn eval_builtin(
         }
       })
     }
-    "env" | "builtins" => yield_(Json::null())
+    "env" => yield_(Json::null())
+    "sqrt" =>
+      match input {
+        Number(n, ..) => yield_(Json::number(n.sqrt()))
+        _ => raise JqError("sqrt requires number input")
+      }
+    "sin" =>
+      match input {
+        Number(n, ..) => yield_(Json::number(@math.sin(n)))
+        _ => raise JqError("sin requires number input")
+      }
+    "cos" =>
+      match input {
+        Number(n, ..) => yield_(Json::number(@math.cos(n)))
+        _ => raise JqError("cos requires number input")
+      }
+    "atan" =>
+      match input {
+        Number(n, ..) => yield_(Json::number(@math.atan(n)))
+        _ => raise JqError("atan requires number input")
+      }
+    "atan2" => {
+      guard args.length() == 1 else { raise JqError("atan2 takes 1 argument") }
+      eval(args[0], input, env, yv => {
+        match (input, yv) {
+          (Number(a, ..), Number(b, ..)) =>
+            yield_(Json::number(@math.atan2(a, b)))
+          _ => raise JqError("atan2 requires number arguments")
+        }
+      })
+    }
+    "log" =>
+      match input {
+        Number(n, ..) => yield_(Json::number(@math.ln(n)))
+        _ => raise JqError("log requires number input")
+      }
+    "log2" =>
+      match input {
+        Number(n, ..) => yield_(Json::number(@math.log2(n)))
+        _ => raise JqError("log2 requires number input")
+      }
+    "exp" =>
+      match input {
+        Number(n, ..) => yield_(Json::number(@math.exp(n)))
+        _ => raise JqError("exp requires number input")
+      }
+    "exp2" =>
+      match input {
+        Number(n, ..) => yield_(Json::number(@math.pow(2.0, n)))
+        _ => raise JqError("exp2 requires number input")
+      }
+    "pow" => {
+      guard args.length() == 2 else { raise JqError("pow takes 2 arguments") }
+      eval(args[0], input, env, base_v => {
+        eval(args[1], input, env, exp_v => {
+          match (base_v, exp_v) {
+            (Number(b, ..), Number(e, ..)) =>
+              yield_(Json::number(@math.pow(b, e)))
+            _ => raise JqError("pow requires number arguments")
+          }
+        })
+      })
+    }
+    "builtins" => {
+      let names : Array[String] = [
+        "length/0", "keys/0", "values/0", "type/0", "empty/0", "add/0", "not/0",
+        "map/1", "select/1", "sort/0", "sort_by/1", "group_by/1", "unique/0", "unique_by/1",
+        "reverse/0", "flatten/0", "flatten/1", "min/0", "max/0", "min_by/1", "max_by/1",
+        "contains/1", "has/1", "any/0", "any/1", "all/0", "all/1", "range/1", "range/2",
+        "range/3", "first/0", "first/1", "last/0", "last/1", "limit/2", "nth/1",
+        "nth/2", "skip/2", "tostring/0", "tonumber/0", "toboolean/0", "tojson/0",
+        "fromjson/0", "ascii_downcase/0", "ascii_upcase/0", "split/1", "join/1",
+        "test/1", "startswith/1", "endswith/1", "ltrimstr/1", "rtrimstr/1", "trim/0",
+        "ltrim/0", "rtrim/0", "trimstr/1", "to_entries/0", "from_entries/0", "with_entries/1",
+        "keys_unsorted/0", "recurse/0", "recurse/1", "walk/1", "transpose/0", "explode/0",
+        "implode/0", "abs/0", "fabs/0", "floor/0", "ceil/0", "round/0", "bsearch/1",
+        "indices/1", "index/1", "rindex/1", "inside/1", "isnan/0", "isinfinite/0",
+        "isfinite/0", "isnormal/0", "infinite/0", "nan/0", "error/0", "error/1",
+        "debug/0", "paths/0", "paths/1", "getpath/1", "map_values/1", "IN/1", "IN/2",
+        "while/2", "until/2", "isempty/1", "ascii/0", "null/0", "true/0", "false/0",
+        "numbers/0", "strings/0", "booleans/0", "nulls/0", "arrays/0", "objects/0",
+        "iterables/0", "scalars/0", "sqrt/0", "sin/0", "cos/0", "atan/0", "atan2/1",
+        "log/0", "log2/0", "exp/0", "exp2/0", "pow/2", "@base64/0", "@base64d/0",
+        "@json/0", "@text/0", "@html/0", "@uri/0",
+      ]
+      let arr = names.map(fn(s) { Json::string(s) })
+      arr.sort_by(fn(a, b) { compare_json(a, b) })
+      yield_(Json::array(arr))
+    }
     "@base64" =>
       match input {
         String(s) => {

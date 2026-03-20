@@ -39,9 +39,13 @@ fn arith_op(op : ArithOp, left : Json, right : Json) -> Json raise JqError {
       )
     }
     (Mod, Number(a, ..), Number(b, ..)) =>
-      Json::number((a.to_int() % b.to_int()).to_double())
+      if a != a || b != b {
+        Json::number(0.0 / 0.0)
+      } else {
+        Json::number((a.to_int() % b.to_int()).to_double())
+      }
     (Mul, String(_), Number(n, ..)) =>
-      if n < 0.0 {
+      if n != n || n < 0.0 {
         Json::null()
       } else if n < 1.0 {
         Json::string("")
@@ -58,7 +62,7 @@ fn arith_op(op : ArithOp, left : Json, right : Json) -> Json raise JqError {
         Json::string(buf.to_string())
       }
     (Mul, Number(n, ..), String(_)) =>
-      if n < 0.0 {
+      if n != n || n < 0.0 {
         Json::null()
       } else if n < 1.0 {
         Json::string("")
@@ -93,6 +97,22 @@ fn arith_op(op : ArithOp, left : Json, right : Json) -> Json raise JqError {
       let parts : Array[Json] = []
       s.split(d).each(part => parts.push(Json::string(part.to_string())))
       Json::array(parts)
+    }
+    (Sub, Array(a), Array(b)) => {
+      let result : Array[Json] = []
+      for i = 0; i < a.length(); i = i + 1 {
+        let mut found = false
+        for j = 0; j < b.length(); j = j + 1 {
+          if a[i] == b[j] {
+            found = true
+            break
+          }
+        }
+        if not(found) {
+          result.push(a[i])
+        }
+      }
+      Json::array(result)
     }
     (Add, String(a), String(b)) => Json::string(a + b)
     (Add, Array(a), Array(b)) => {

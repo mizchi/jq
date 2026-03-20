@@ -333,7 +333,7 @@ fn eval(
           Some(se) =>
             eval(se, input, env, sv => {
               match sv {
-                Number(n, ..) => s = Some(n.floor().to_int())
+                Number(n, ..) => if not(n != n) { s = Some(n.floor().to_int()) }
                 _ => raise JqError("slice index must be a number")
               }
             })
@@ -343,16 +343,17 @@ fn eval(
           Some(ee) =>
             eval(ee, input, env, ev => {
               match ev {
-                Number(n, ..) => {
-                  let floored = n.floor()
-                  // jq uses ceil for end index on non-integer floats
-                  let idx = if floored < n {
-                    floored.to_int() + 1
-                  } else {
-                    floored.to_int()
+                Number(n, ..) =>
+                  if not(n != n) {
+                    let floored = n.floor()
+                    // jq uses ceil for end index on non-integer floats
+                    let idx = if floored < n {
+                      floored.to_int() + 1
+                    } else {
+                      floored.to_int()
+                    }
+                    e = Some(idx)
                   }
-                  e = Some(idx)
-                }
                 _ => raise JqError("slice index must be a number")
               }
             })
@@ -533,15 +534,18 @@ fn dyn_index_impl(
   yield_ : (Json) -> Unit raise JqError,
 ) -> Unit raise JqError {
   match (base, idx) {
-    (Array(arr), Number(n, ..)) => {
-      let i = n.to_int()
-      let actual = if i < 0 { arr.length() + i } else { i }
-      if actual >= 0 && actual < arr.length() {
-        yield_(arr[actual])
-      } else {
+    (Array(arr), Number(n, ..)) =>
+      if n != n {
         yield_(Json::null())
+      } else {
+        let i = n.to_int()
+        let actual = if i < 0 { arr.length() + i } else { i }
+        if actual >= 0 && actual < arr.length() {
+          yield_(arr[actual])
+        } else {
+          yield_(Json::null())
+        }
       }
-    }
     (Object(map), String(k)) =>
       match map.get(k) {
         Some(v) => yield_(v)
