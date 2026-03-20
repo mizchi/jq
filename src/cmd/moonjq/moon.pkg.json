@@ -1,0 +1,14 @@
+{
+  "import": [
+    "mizchi/jq",
+    "moonbitlang/core/json",
+    "moonbitlang/core/argparse",
+    "moonbitlang/async",
+    "moonbitlang/async/stdio"
+  ],
+  "is-main": true,
+  "targets": {
+    "main.mbt": ["native"],
+    "stub.mbt": ["wasm-gc", "wasm", "js"]
+  }
+}

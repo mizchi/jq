@@ -2,12 +2,49 @@
 
 A jq clone implemented in MoonBit.
 
+## Install CLI
+
+```bash
+moon install mizchi/jq/cmd/moonjq
+```
+
+This installs `moonjq` to `~/.moon/bin/moonjq`.
+
+```bash
+echo '{"name":"alice","age":30}' | moonjq '.name'
+# "alice"
+
+echo '[1,2,3,4,5]' | moonjq 'map(. * 2) | add'
+# 30
+
+echo '[{"a":1},{"a":2},{"a":3}]' | moonjq '[.[] | select(.a > 1)]'
+# [{"a":2},{"a":3}]
+```
+
+## Use as Library
+
+```bash
+moon add mizchi/jq
+```
+
+```moonbit
+let results = @jq.run(".foo", @json.parse("{\"foo\":42}"))
+// results = [Number(42)]
+
+// Pre-compile for repeated use
+let filter = @jq.compile("map(. + 1)")
+let r1 = @jq.run_compiled(filter, @json.parse("[1,2,3]"))
+// r1 = [Array([Number(2), Number(3), Number(4)])]
+```
+
+See [README.mbt.md](src/README.mbt.md) for full doc-tested API examples.
+
 ## Features
 
 - Lexer, recursive descent parser, callback-based evaluator
 - 87.3% compatibility with jq's official test suite (151/173 verified tests)
 - 50+ builtin functions
-- Target: js (Node.js)
+- Native CLI + JS library target
 
 ### Supported Syntax
 
