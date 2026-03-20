@@ -38,7 +38,7 @@ build:
 
 # Run moonjq CLI
 moonjq *ARGS:
-    moon run src/cmd/moonjq --target native -- {{ARGS}}
+    moon run cmd/moonjq --target native -- {{ARGS}}
 
 # Clean build artifacts
 clean:
