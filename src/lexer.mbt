@@ -74,10 +74,14 @@ fn tokenize(input : String) -> Array[Token] raise JqError {
         tokens.push(RParen)
         pos += 1
       }
-      '|' => {
-        tokens.push(Pipe)
-        pos += 1
-      }
+      '|' =>
+        if pos + 1 < len && chars[pos + 1] == '=' {
+          tokens.push(PipeEq)
+          pos += 2
+        } else {
+          tokens.push(Pipe)
+          pos += 1
+        }
       ',' => {
         tokens.push(Comma)
         pos += 1
@@ -94,36 +98,61 @@ fn tokenize(input : String) -> Array[Token] raise JqError {
         tokens.push(Question)
         pos += 1
       }
-      '+' => {
-        tokens.push(Plus)
-        pos += 1
-      }
-      '-' => {
-        tokens.push(Minus)
-        pos += 1
-      }
-      '*' => {
-        tokens.push(Star)
-        pos += 1
-      }
+      '+' =>
+        if pos + 1 < len && chars[pos + 1] == '=' {
+          tokens.push(PlusEq)
+          pos += 2
+        } else {
+          tokens.push(Plus)
+          pos += 1
+        }
+      '-' =>
+        if pos + 1 < len && chars[pos + 1] == '=' {
+          tokens.push(MinusEq)
+          pos += 2
+        } else {
+          tokens.push(Minus)
+          pos += 1
+        }
+      '*' =>
+        if pos + 1 < len && chars[pos + 1] == '=' {
+          tokens.push(StarEq)
+          pos += 2
+        } else {
+          tokens.push(Star)
+          pos += 1
+        }
       '/' =>
         if pos + 1 < len && chars[pos + 1] == '/' {
-          tokens.push(SlashSlash)
+          if pos + 2 < len && chars[pos + 2] == '=' {
+            tokens.push(SlashSlashEq)
+            pos += 3
+          } else {
+            tokens.push(SlashSlash)
+            pos += 2
+          }
+        } else if pos + 1 < len && chars[pos + 1] == '=' {
+          tokens.push(SlashEq)
           pos += 2
         } else {
           tokens.push(Slash)
           pos += 1
         }
-      '%' => {
-        tokens.push(Percent)
-        pos += 1
-      }
+      '%' =>
+        if pos + 1 < len && chars[pos + 1] == '=' {
+          tokens.push(PercentEq)
+          pos += 2
+        } else {
+          tokens.push(Percent)
+          pos += 1
+        }
       '=' =>
         if pos + 1 < len && chars[pos + 1] == '=' {
           tokens.push(EqEq)
           pos += 2
         } else {
-          raise JqError("unexpected '='")
+          tokens.push(Eq)
+          pos += 1
         }
       '!' =>
         if pos + 1 < len && chars[pos + 1] == '=' {
@@ -151,8 +180,52 @@ fn tokenize(input : String) -> Array[Token] raise JqError {
       '"' => {
         pos += 1
         let buf = StringBuilder::new()
+        let mut has_interp = false
+        let parts : Array[StringInterpPart] = []
         while pos < len && chars[pos] != '"' {
-          if chars[pos] == '\\' {
+          if chars[pos] == '\\' && pos + 1 < len && chars[pos + 1] == '(' {
+            // String interpolation \(...)
+            parts.push(Lit(buf.to_string()))
+            buf.reset()
+            pos += 2
+            let mut depth = 1
+            let expr_buf = StringBuilder::new()
+            while pos < len && depth > 0 {
+              if chars[pos] == '"' {
+                // Skip over string literals inside interpolation expression
+                expr_buf.write_char(chars[pos])
+                pos += 1
+                while pos < len && chars[pos] != '"' {
+                  if chars[pos] == '\\' && pos + 1 < len {
+                    expr_buf.write_char(chars[pos])
+                    pos += 1
+                    expr_buf.write_char(chars[pos])
+                    pos += 1
+                  } else {
+                    expr_buf.write_char(chars[pos])
+                    pos += 1
+                  }
+                }
+                if pos < len {
+                  expr_buf.write_char(chars[pos])
+                  pos += 1
+                }
+                continue
+              }
+              if chars[pos] == '(' {
+                depth += 1
+              } else if chars[pos] == ')' {
+                depth -= 1
+              }
+              if depth > 0 {
+                expr_buf.write_char(chars[pos])
+              }
+              pos += 1
+            }
+            parts.push(ExprSource(expr_buf.to_string()))
+            has_interp = true
+            continue
+          } else if chars[pos] == '\\' {
             pos += 1
             if pos >= len {
               raise JqError("unterminated string")
@@ -178,7 +251,15 @@ fn tokenize(input : String) -> Array[Token] raise JqError {
           raise JqError("unterminated string")
         }
         pos += 1
-        tokens.push(Str(buf.to_string()))
+        if has_interp {
+          let remaining = buf.to_string()
+          if not(remaining.is_empty()) {
+            parts.push(Lit(remaining))
+          }
+          tokens.push(StrInterp(parts))
+        } else {
+          tokens.push(Str(buf.to_string()))
+        }
       }
       '$' => {
         pos += 1

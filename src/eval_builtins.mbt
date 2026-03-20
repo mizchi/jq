@@ -952,7 +952,58 @@ fn eval_builtin(
       }
     "input" => raise JqError("input not supported")
     "inputs" => raise JqError("inputs not supported")
-    "path" => raise JqError("path not yet implemented")
+    "path" => {
+      guard args.length() == 1 else { raise JqError("path takes 1 argument") }
+      eval_path(args[0], input, env, p => yield_(Json::array(p)))
+    }
+    "setpath" => {
+      guard args.length() == 2 else {
+        raise JqError("setpath takes 2 arguments")
+      }
+      eval(args[0], input, env, path_val => {
+        eval(args[1], input, env, value => {
+          match path_val {
+            Array(p) => yield_(setpath_impl(input, p, value))
+            _ => raise JqError("setpath: first argument must be an array")
+          }
+        })
+      })
+    }
+    "delpaths" => {
+      guard args.length() == 1 else {
+        raise JqError("delpaths takes 1 argument")
+      }
+      eval(args[0], input, env, paths_val => {
+        match paths_val {
+          Array(arr) => {
+            let paths : Array[Array[Json]] = []
+            for i = 0; i < arr.length(); i = i + 1 {
+              match arr[i] {
+                Array(p) => paths.push(p)
+                _ => raise JqError("delpaths: each path must be an array")
+              }
+            }
+            yield_(delpaths_impl(input, paths))
+          }
+          _ => raise JqError("delpaths: argument must be an array of paths")
+        }
+      })
+    }
+    "del" => {
+      guard args.length() == 1 else { raise JqError("del takes 1 argument") }
+      let paths : Array[Array[Json]] = []
+      eval_path(args[0], input, env, p => paths.push(p))
+      yield_(delpaths_impl(input, paths))
+    }
+    "pick" => {
+      guard args.length() == 1 else { raise JqError("pick takes 1 argument") }
+      let mut result : Json = Json::null()
+      eval_path(args[0], input, env, p => {
+        let value = getpath_impl(input, p)
+        result = setpath_impl(result, p, value)
+      })
+      yield_(result)
+    }
     "paths" =>
       if args.length() == 1 {
         // paths(f) - return paths where f is truthy
@@ -1498,12 +1549,13 @@ fn eval_builtin(
         "implode/0", "abs/0", "fabs/0", "floor/0", "ceil/0", "round/0", "bsearch/1",
         "indices/1", "index/1", "rindex/1", "inside/1", "isnan/0", "isinfinite/0",
         "isfinite/0", "isnormal/0", "infinite/0", "nan/0", "error/0", "error/1",
-        "debug/0", "paths/0", "paths/1", "getpath/1", "map_values/1", "IN/1", "IN/2",
-        "while/2", "until/2", "isempty/1", "ascii/0", "null/0", "true/0", "false/0",
-        "numbers/0", "strings/0", "booleans/0", "nulls/0", "arrays/0", "objects/0",
-        "iterables/0", "scalars/0", "sqrt/0", "sin/0", "cos/0", "atan/0", "atan2/1",
-        "log/0", "log2/0", "exp/0", "exp2/0", "pow/2", "@base64/0", "@base64d/0",
-        "@json/0", "@text/0", "@html/0", "@uri/0",
+        "debug/0", "paths/0", "paths/1", "path/1", "getpath/1", "setpath/2", "delpaths/1",
+        "del/1", "pick/1", "map_values/1", "IN/1", "IN/2", "while/2", "until/2",
+        "isempty/1", "ascii/0", "null/0", "true/0", "false/0", "numbers/0", "strings/0",
+        "booleans/0", "nulls/0", "arrays/0", "objects/0", "iterables/0", "scalars/0",
+        "sqrt/0", "sin/0", "cos/0", "atan/0", "atan2/1", "log/0", "log2/0", "exp/0",
+        "exp2/0", "pow/2", "@base64/0", "@base64d/0", "@json/0", "@text/0", "@html/0",
+        "@uri/0",
       ]
       let arr = names.map(fn(s) { Json::string(s) })
       arr.sort_by(fn(a, b) { compare_json(a, b) })

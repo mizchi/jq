@@ -52,8 +52,8 @@ pub enum Filter {
   Try(Filter)
   TryCatch(Filter, Filter)
   IfThenElse(Filter, Filter, Filter)
-  Binding(String, Filter, Filter)
-  Reduce(Filter, String, Filter, Filter)
+  Binding(Pattern, Filter, Filter)
+  Reduce(Filter, Pattern, Filter, Filter)
   FuncDef(String, Array[String], Filter, Filter)
   FuncCall(String, Array[Filter])
   DynIndex(Filter)
@@ -64,6 +64,12 @@ pub enum Filter {
   Compare(CmpOp, Filter, Filter)
   LogicAnd(Filter, Filter)
   LogicOr(Filter, Filter)
+  Alternative(Filter, Filter)
+  Foreach(Filter, Pattern, Filter, Filter, Filter?)
+  StringInterp(Array[(String, Filter?)])
+  Assign(Filter, Filter)
+  Update(Filter, Filter)
+  UpdateAlt(Filter, Filter)
 }
 pub impl Show for Filter
 
@@ -72,6 +78,13 @@ pub enum ObjKey {
   ExprKey(Filter)
 }
 pub impl Show for ObjKey
+
+pub enum Pattern {
+  PatVar(String)
+  PatArray(Array[Pattern])
+  PatObject(Array[(String, Pattern)])
+}
+pub impl Show for Pattern
 
 // Type aliases
 

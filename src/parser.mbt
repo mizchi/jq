@@ -48,13 +48,55 @@ fn parse(tokens : Array[Token]) -> Filter raise JqError {
 
 ///|
 fn Parser::parse_pipe(self : Parser) -> Filter raise JqError {
-  let mut left = self.parse_comma()
-  while self.peek() == Pipe {
-    ignore(self.advance())
-    let right = self.parse_comma()
-    left = Pipe(left, right)
+  let left = self.parse_comma()
+  match self.peek() {
+    Pipe => {
+      ignore(self.advance())
+      let right = self.parse_pipe()
+      Pipe(left, right)
+    }
+    Eq => {
+      ignore(self.advance())
+      let right = self.parse_pipe()
+      Assign(left, right)
+    }
+    PipeEq => {
+      ignore(self.advance())
+      let right = self.parse_pipe()
+      Update(left, right)
+    }
+    PlusEq => {
+      ignore(self.advance())
+      let right = self.parse_pipe()
+      Update(left, Arith(ArithOp::Add, Identity, right))
+    }
+    MinusEq => {
+      ignore(self.advance())
+      let right = self.parse_pipe()
+      Update(left, Arith(ArithOp::Sub, Identity, right))
+    }
+    StarEq => {
+      ignore(self.advance())
+      let right = self.parse_pipe()
+      Update(left, Arith(ArithOp::Mul, Identity, right))
+    }
+    SlashEq => {
+      ignore(self.advance())
+      let right = self.parse_pipe()
+      Update(left, Arith(ArithOp::Div, Identity, right))
+    }
+    PercentEq => {
+      ignore(self.advance())
+      let right = self.parse_pipe()
+      Update(left, Arith(ArithOp::Mod, Identity, right))
+    }
+    SlashSlashEq => {
+      ignore(self.advance())
+      let right = self.parse_pipe()
+      UpdateAlt(left, right)
+    }
+    _ => left
   }
-  left
 }
 
 ///|
@@ -69,18 +111,144 @@ fn Parser::parse_comma(self : Parser) -> Filter raise JqError {
 }
 
 ///|
+/// Evaluate a constant string expression at parse time (for pattern keys).
+fn eval_const_string(filter : Filter) -> String raise JqError {
+  match filter {
+    Literal(String(s)) => s
+    Arith(ArithOp::Add, left, right) =>
+      eval_const_string(left) + eval_const_string(right)
+    _ =>
+      raise JqError("pattern object key must be a constant string expression")
+  }
+}
+
+///|
+fn Parser::parse_pattern(self : Parser) -> Pattern raise JqError {
+  match self.peek() {
+    Variable(name) => {
+      ignore(self.advance())
+      PatVar("$" + name)
+    }
+    LBracket => {
+      ignore(self.advance())
+      let pats : Array[Pattern] = []
+      if self.peek() != RBracket {
+        pats.push(self.parse_pattern())
+        while self.peek() == Comma {
+          ignore(self.advance())
+          pats.push(self.parse_pattern())
+        }
+      }
+      self.expect(RBracket)
+      PatArray(pats)
+    }
+    LBrace => {
+      ignore(self.advance())
+      let fields : Array[(String, Pattern)] = []
+      if self.peek() != RBrace {
+        fields.push(self.parse_pattern_field())
+        while self.peek() == Comma {
+          ignore(self.advance())
+          fields.push(self.parse_pattern_field())
+        }
+      }
+      self.expect(RBrace)
+      PatObject(fields)
+    }
+    _ => raise JqError("expected pattern (variable, [ ], or { })")
+  }
+}
+
+///|
+fn Parser::parse_pattern_field(
+  self : Parser,
+) -> (String, Pattern) raise JqError {
+  match self.peek() {
+    Variable(name) => {
+      ignore(self.advance())
+      (name, PatVar("$" + name))
+    }
+    Ident(name) => {
+      ignore(self.advance())
+      if self.peek() == Colon {
+        ignore(self.advance())
+        let pat = self.parse_pattern()
+        (name, pat)
+      } else {
+        (name, PatVar("$" + name))
+      }
+    }
+    Str(s) => {
+      ignore(self.advance())
+      self.expect(Colon)
+      let pat = self.parse_pattern()
+      (s, pat)
+    }
+    LParen => {
+      // Dynamic key pattern: ("expr"): $var
+      // We evaluate the key expression at bind time
+      // For now, parse the expression but store it as a special marker
+      // Actually jq evaluates the key at bind time, which requires
+      // storing the expression. We'll use a special pattern variant.
+      // For simplicity, eval the expr during parse if it's a literal concatenation
+      // Actually, we need to handle this at eval time.
+      // Store the expression source in a special way.
+      ignore(self.advance())
+      let key_expr = self.parse_pipe()
+      self.expect(RParen)
+      self.expect(Colon)
+      let pat = self.parse_pattern()
+      // We encode dynamic key patterns by storing a sentinel key
+      // and the expression in PatObject. But Pattern doesn't support this.
+      // Alternative: evaluate literal expressions at parse time.
+      // For now, try to evaluate constant string concatenations:
+      let key = eval_const_string(key_expr)
+      (key, pat)
+    }
+    _ => {
+      // Handle keywords used as field names (e.g., "as", "if", "then", etc.)
+      let tok = self.peek()
+      let name = match tok {
+        KwAs => "as"
+        KwAnd => "and"
+        KwOr => "or"
+        KwNot => "not"
+        KwIf => "if"
+        KwThen => "then"
+        KwElif => "elif"
+        KwElse => "else"
+        KwEnd => "end"
+        KwDef => "def"
+        KwTry => "try"
+        KwCatch => "catch"
+        KwReduce => "reduce"
+        KwForeach => "foreach"
+        KwTrue => "true"
+        KwFalse => "false"
+        KwNull => "null"
+        _ => raise JqError("expected pattern field")
+      }
+      ignore(self.advance())
+      if self.peek() == Colon {
+        ignore(self.advance())
+        let pat = self.parse_pattern()
+        (name, pat)
+      } else {
+        (name, PatVar("$" + name))
+      }
+    }
+  }
+}
+
+///|
 fn Parser::parse_binding(self : Parser) -> Filter raise JqError {
   let expr = self.parse_alternative()
   if self.peek() == KwAs {
     ignore(self.advance())
-    let var_tok = self.advance()
-    let var_name = match var_tok {
-      Variable(name) => name
-      _ => raise JqError("expected variable after 'as'")
-    }
+    let pat = self.parse_pattern()
     self.expect(Pipe)
     let body = self.parse_pipe()
-    Binding("$" + var_name, expr, body)
+    Binding(pat, expr, body)
   } else {
     expr
   }
@@ -471,6 +639,21 @@ fn Parser::parse_primary(self : Parser) -> Filter raise JqError {
       ignore(self.advance())
       Literal(Json::string(s))
     }
+    StrInterp(parts) => {
+      ignore(self.advance())
+      let interp_parts : Array[(String, Filter?)] = []
+      for part in parts {
+        match part {
+          Lit(s) => interp_parts.push((s, None))
+          ExprSource(src) => {
+            let expr_tokens = tokenize(src)
+            let expr_filter = parse(expr_tokens)
+            interp_parts.push(("", Some(expr_filter)))
+          }
+        }
+      }
+      StringInterp(interp_parts)
+    }
     KwTrue => {
       ignore(self.advance())
       Literal(Json::boolean(true))
@@ -631,9 +814,38 @@ fn Parser::parse_object_field(self : Parser) -> (ObjKey, Filter) raise JqError {
     }
     Str(s) => {
       ignore(self.advance())
-      self.expect(Colon)
-      let value = self.parse_object_value()
-      (StrKey(s), value)
+      if self.peek() == Colon {
+        ignore(self.advance())
+        let value = self.parse_object_value()
+        (StrKey(s), value)
+      } else {
+        // Shorthand: {"key"} means {"key": .["key"]}
+        (StrKey(s), DynIndex(Literal(Json::string(s))))
+      }
+    }
+    StrInterp(parts) => {
+      ignore(self.advance())
+      // Build the StringInterp filter for the key
+      let interp_parts : Array[(String, Filter?)] = []
+      for part in parts {
+        match part {
+          Lit(s) => interp_parts.push((s, None))
+          ExprSource(src) => {
+            let expr_tokens = tokenize(src)
+            let expr_filter = parse(expr_tokens)
+            interp_parts.push(("", Some(expr_filter)))
+          }
+        }
+      }
+      let key_filter = StringInterp(interp_parts)
+      if self.peek() == Colon {
+        ignore(self.advance())
+        let value = self.parse_object_value()
+        (ExprKey(key_filter), value)
+      } else {
+        // Shorthand: {"interp_key"} means {"interp_key": .["interp_key"]}
+        (ExprKey(key_filter), DynIndex(key_filter))
+      }
     }
     LParen => {
       ignore(self.advance())
@@ -686,28 +898,20 @@ fn Parser::parse_if(self : Parser) -> Filter raise JqError {
 fn Parser::parse_reduce(self : Parser) -> Filter raise JqError {
   let iter_expr = self.parse_or()
   self.expect(KwAs)
-  let var_tok = self.advance()
-  let var_name = match var_tok {
-    Variable(name) => name
-    _ => raise JqError("expected variable after 'as' in reduce")
-  }
+  let pat = self.parse_pattern()
   self.expect(LParen)
   let init = self.parse_pipe()
   self.expect(Semicolon)
   let update = self.parse_pipe()
   self.expect(RParen)
-  Reduce(iter_expr, "$" + var_name, init, update)
+  Reduce(iter_expr, pat, init, update)
 }
 
 ///|
 fn Parser::parse_foreach(self : Parser) -> Filter raise JqError {
   let iter_expr = self.parse_postfix()
   self.expect(KwAs)
-  let var_tok = self.advance()
-  let var_name = match var_tok {
-    Variable(name) => name
-    _ => raise JqError("expected variable after 'as' in foreach")
-  }
+  let pat = self.parse_pattern()
   self.expect(LParen)
   let init = self.parse_pipe()
   self.expect(Semicolon)
@@ -719,7 +923,7 @@ fn Parser::parse_foreach(self : Parser) -> Filter raise JqError {
     None
   }
   self.expect(RParen)
-  Foreach(iter_expr, "$" + var_name, init, update, extract)
+  Foreach(iter_expr, pat, init, update, extract)
 }
 
 ///|

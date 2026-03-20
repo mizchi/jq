@@ -5,6 +5,13 @@ pub(all) suberror JqError {
 } derive(Show)
 
 ///|
+/// A part of a string interpolation token.
+priv enum StringInterpPart {
+  Lit(String)
+  ExprSource(String)
+} derive(Show, Eq)
+
+///|
 priv enum Token {
   Dot
   DotDot
@@ -21,6 +28,7 @@ priv enum Token {
   Question
   Ident(String)
   Str(String)
+  StrInterp(Array[StringInterpPart])
   Num(Double)
   Variable(String)
   Format(String)
@@ -36,6 +44,14 @@ priv enum Token {
   Slash
   SlashSlash
   Percent
+  Eq
+  PipeEq
+  PlusEq
+  MinusEq
+  StarEq
+  SlashEq
+  PercentEq
+  SlashSlashEq
   KwAnd
   KwOr
   KwNot
@@ -85,6 +101,14 @@ pub enum ObjKey {
 } derive(Show)
 
 ///|
+/// Pattern for destructuring bind in 'as' expressions.
+pub enum Pattern {
+  PatVar(String)
+  PatArray(Array[Pattern])
+  PatObject(Array[(String, Pattern)])
+} derive(Show)
+
+///|
 /// A compiled jq filter AST node.
 pub enum Filter {
   Identity
@@ -102,8 +126,8 @@ pub enum Filter {
   Try(Filter)
   TryCatch(Filter, Filter)
   IfThenElse(Filter, Filter, Filter)
-  Binding(String, Filter, Filter)
-  Reduce(Filter, String, Filter, Filter)
+  Binding(Pattern, Filter, Filter)
+  Reduce(Filter, Pattern, Filter, Filter)
   FuncDef(String, Array[String], Filter, Filter)
   FuncCall(String, Array[Filter])
   DynIndex(Filter)
@@ -115,5 +139,9 @@ pub enum Filter {
   LogicAnd(Filter, Filter)
   LogicOr(Filter, Filter)
   Alternative(Filter, Filter)
-  Foreach(Filter, String, Filter, Filter, Filter?)
+  Foreach(Filter, Pattern, Filter, Filter, Filter?)
+  StringInterp(Array[(String, Filter?)])
+  Assign(Filter, Filter)
+  Update(Filter, Filter)
+  UpdateAlt(Filter, Filter)
 } derive(Show)

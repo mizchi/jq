@@ -29,9 +29,9 @@ fn optimize(filter : Filter) -> Filter {
     TryCatch(inner, handler) => TryCatch(optimize(inner), optimize(handler))
     IfThenElse(cond, then_b, else_b) =>
       IfThenElse(optimize(cond), optimize(then_b), optimize(else_b))
-    Binding(name, expr, body) => Binding(name, optimize(expr), optimize(body))
-    Reduce(iter, name, init, update) =>
-      Reduce(optimize(iter), name, optimize(init), optimize(update))
+    Binding(pat, expr, body) => Binding(pat, optimize(expr), optimize(body))
+    Reduce(iter, pat, init, update) =>
+      Reduce(optimize(iter), pat, optimize(init), optimize(update))
     FuncDef(name, params, body, rest) =>
       FuncDef(name, params, optimize(body), optimize(rest))
     FuncCall(name, args) => {
@@ -50,6 +50,37 @@ fn optimize(filter : Filter) -> Filter {
     PostfixDynIndex(base, idx) => PostfixDynIndex(optimize(base), optimize(idx))
     DynSlice(base, start, end) =>
       DynSlice(optimize(base), start.map(optimize), end.map(optimize))
+    Alternative(left, right) => Alternative(optimize(left), optimize(right))
+    Foreach(iter, pat, init, update, extract) =>
+      Foreach(
+        optimize(iter),
+        pat,
+        optimize(init),
+        optimize(update),
+        extract.map(optimize),
+      )
+    StringInterp(parts) => {
+      let opt_parts : Array[(String, Filter?)] = []
+      for part in parts {
+        let (lit, filter_opt) = part
+        opt_parts.push(
+          (
+            lit,
+            match filter_opt {
+              Some(f) => Some(optimize(f))
+              None => None
+            },
+          ),
+        )
+      }
+      StringInterp(opt_parts)
+    }
+    Assign(path_expr, value_expr) =>
+      Assign(optimize(path_expr), optimize(value_expr))
+    Update(path_expr, update_filter) =>
+      Update(optimize(path_expr), optimize(update_filter))
+    UpdateAlt(path_expr, value_expr) =>
+      UpdateAlt(optimize(path_expr), optimize(value_expr))
     _ => filter
   }
 }

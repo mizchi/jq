@@ -372,6 +372,62 @@ fn walk_impl(
 }
 
 ///|
+/// Bind variables from a destructuring pattern against a JSON value.
+fn bind_pattern(env : Scope, pattern : Pattern, value : Json) -> Scope {
+  match pattern {
+    PatVar(name) => env.bind_var(name, value)
+    PatArray(pats) => {
+      let arr = match value {
+        Array(a) => a
+        _ => []
+      }
+      let mut new_env = env
+      for i = 0; i < pats.length(); i = i + 1 {
+        let v = if i < arr.length() { arr[i] } else { Json::null() }
+        new_env = bind_pattern(new_env, pats[i], v)
+      }
+      new_env
+    }
+    PatObject(fields) => {
+      let map : Map[String, Json] = match value {
+        Object(m) => m
+        _ => Map::new()
+      }
+      let mut new_env = env
+      for field in fields {
+        let (key, pat) = field
+        let v = match map.get(key) {
+          Some(v) => v
+          None => Json::null()
+        }
+        new_env = bind_pattern(new_env, pat, v)
+      }
+      new_env
+    }
+  }
+}
+
+///|
+/// Convert a JSON value to its string representation for string interpolation.
+fn json_to_interp_string(v : Json) -> String {
+  match v {
+    String(s) => s
+    Null => "null"
+    True => "true"
+    False => "false"
+    Number(n, ..) => {
+      let i = n.to_int()
+      if i.to_double() == n {
+        i.to_string()
+      } else {
+        n.to_string()
+      }
+    }
+    _ => v.stringify()
+  }
+}
+
+///|
 let jq_error_prefix : String = "\u0000json:"
 
 ///|

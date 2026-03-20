@@ -301,15 +301,15 @@ fn eval(
           eval(else_branch, input, env, yield_)
         }
       })
-    Binding(var_name, expr, body) =>
+    Binding(pat, expr, body) =>
       eval(expr, input, env, v => {
-        let new_env = env.bind_var(var_name, v)
+        let new_env = bind_pattern(env, pat, v)
         eval(body, input, new_env, yield_)
       })
-    Reduce(iter_expr, var_name, init, update) => {
+    Reduce(iter_expr, pat, init, update) => {
       let mut acc = eval_single(init, input, env)
       eval(iter_expr, input, env, v => {
-        let new_env = env.bind_var(var_name, v)
+        let new_env = bind_pattern(env, pat, v)
         acc = eval_single(update, acc, new_env)
       })
       yield_(acc)
@@ -467,19 +467,77 @@ fn eval(
         eval(right, input, env, yield_)
       }
     }
-    Foreach(iter_expr, var_name, init, update, extract) => {
+    Foreach(iter_expr, pat, init, update, extract) => {
       let mut acc = eval_single(init, input, env)
       eval(iter_expr, input, env, v => {
-        let new_env = env.bind_var(var_name, v)
+        let new_env = bind_pattern(env, pat, v)
         acc = eval_single(update, acc, new_env)
         match extract {
           Some(ext) => {
-            let new_env2 = env.bind_var(var_name, v)
+            let new_env2 = bind_pattern(env, pat, v)
             eval(ext, acc, new_env2, yield_)
           }
           None => yield_(acc)
         }
       })
+    }
+    StringInterp(parts) => {
+      let buf = StringBuilder::new()
+      for part in parts {
+        let (lit, filter_opt) = part
+        if not(lit.is_empty()) {
+          buf.write_string(lit)
+        }
+        match filter_opt {
+          Some(f) => {
+            let v = eval_single(f, input, env)
+            buf.write_string(json_to_interp_string(v))
+          }
+          None => ()
+        }
+      }
+      yield_(Json::string(buf.to_string()))
+    }
+    Assign(path_expr, value_expr) =>
+      eval(value_expr, input, env, value => {
+        let mut result = input
+        eval_path(path_expr, input, env, path => {
+          result = setpath_impl(result, path, value)
+        })
+        yield_(result)
+      })
+    Update(path_expr, update_filter) => {
+      let mut result = input
+      let paths : Array[Array[Json]] = []
+      eval_path(path_expr, input, env, p => paths.push(p))
+      let del_paths : Array[Array[Json]] = []
+      for p in paths {
+        let current = getpath_impl(result, p)
+        let vals : Array[Json] = []
+        eval(update_filter, current, env, v => vals.push(v))
+        if vals.is_empty() {
+          del_paths.push(p)
+        } else {
+          result = setpath_impl(result, p, vals[0])
+        }
+      }
+      if not(del_paths.is_empty()) {
+        result = delpaths_impl(result, del_paths)
+      }
+      yield_(result)
+    }
+    UpdateAlt(path_expr, value_expr) => {
+      let mut result = input
+      let paths : Array[Array[Json]] = []
+      eval_path(path_expr, input, env, p => paths.push(p))
+      for p in paths {
+        let current = getpath_impl(result, p)
+        if not(is_truthy(current)) {
+          let new_val = eval_single(value_expr, current, env)
+          result = setpath_impl(result, p, new_val)
+        }
+      }
+      yield_(result)
     }
   }
 }

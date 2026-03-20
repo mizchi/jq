@@ -7,24 +7,12 @@ const lines = content.split("\n");
 
 // Features we DON'T support - skip tests containing these patterns
 const UNSUPPORTED_PATTERNS = [
-  /\\[(]/, // string interpolation \(...)
   /@(urid|csv|tsv|sh)\b/, // unsupported format strings
   /\?\/\//, // alternative destructuring operator
-  /\bas\s+\[/, // destructuring as [$a, $b]
-  /\bas\s+\{/, // destructuring as {$a}
   /\blabel\b/, // label
   /\bbreak\b/, // break
-  /\bdel\b/, // del()
-  /\bsetpath\b/, // setpath()
-  /\bdelpaths\b/, // delpaths()
-  /\bpick\b/, // pick()
-  /\bgetpath\b/, // getpath() - skip complex uses
-  /\|=/, // update assignment
-  /\/\/=/, // alternative assignment
-  /[^=!<>]=(?!=)/, // assignment (but not ==, !=, <=, >=)
   /\bfenv\b/, // fenv
   /\butf8bytelength\b/, // utf8bytelength
-  /\bpath\b/, // path()
   /\benv\b/, // env
   /\b__loc__\b/, // __loc__
   /\brecurse_down\b/, // deprecated
@@ -42,7 +30,6 @@ const UNSUPPORTED_PATTERNS = [
   /\bgsub\(/, // regex gsub
   /\bsplits\b/, // splits
   /\bltrimstr\b.*\btrimstr\b/, // complex trim patterns
-  /\bgetpath\(/, // getpath with args
   /\bnow\b/, // now
   /\bstrftime\b/, // strftime
   /\bstrptime\b/, // strptime
@@ -112,16 +99,10 @@ function isSupported(test) {
   // Skip tests with embedded unicode escapes in expected output that differ from input
   // Skip tests with very long expected outputs (complex)
   if (test.expected.some((e) => e.length > 200)) return false;
-  // Skip if filter contains features we can't handle
-  if (test.filter.includes("|=")) return false;
-  // //= is handled in UNSUPPORTED_PATTERNS already
   // Skip .e0, .E1 style (scientific notation field names)
   if (/\.E[+-]?\d/.test(test.filter)) return false;
   // Skip def with complex recursive/nested patterns
   if ((test.filter.match(/\bdef\b/g) || []).length > 2) return false;
-  // Skip tests that use .[key] = value assignment
-  if (/\.\[.*\]\s*=/.test(test.filter)) return false;
-  if (/\.\w+\s*=[^=]/.test(test.filter)) return false;
 
   return true;
 }
