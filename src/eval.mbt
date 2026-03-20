@@ -1,0 +1,480 @@
+///|
+priv enum Scope {
+  Empty
+  Var(String, Json, Scope)
+  Func(String, Array[String], Filter, Scope)
+  FilterArg(String, Filter, Scope)
+}
+
+///|
+let empty_scope : Scope = Scope::Empty
+
+///|
+fn Scope::bind_var(self : Scope, name : String, value : Json) -> Scope {
+  Var(name, value, self)
+}
+
+///|
+fn Scope::get_var(self : Scope, name : String) -> Json? {
+  match self {
+    Empty => None
+    Var(n, v, parent) => if n == name { Some(v) } else { parent.get_var(name) }
+    Func(_, _, _, parent) => parent.get_var(name)
+    FilterArg(_, _, parent) => parent.get_var(name)
+  }
+}
+
+///|
+fn Scope::bind_func(
+  self : Scope,
+  name : String,
+  params : Array[String],
+  body : Filter,
+) -> Scope {
+  Func(name, params, body, self)
+}
+
+///|
+fn Scope::get_func(self : Scope, name : String) -> (Array[String], Filter)? {
+  match self {
+    Empty => None
+    Var(_, _, parent) => parent.get_func(name)
+    Func(n, params, body, parent) =>
+      if n == name {
+        Some((params, body))
+      } else {
+        parent.get_func(name)
+      }
+    FilterArg(_, _, parent) => parent.get_func(name)
+  }
+}
+
+///|
+fn Scope::bind_filter_arg(
+  self : Scope,
+  name : String,
+  filter : Filter,
+) -> Scope {
+  FilterArg(name, filter, self)
+}
+
+///|
+fn Scope::get_filter_arg(self : Scope, name : String) -> Filter? {
+  match self {
+    Empty => None
+    Var(_, _, parent) => parent.get_filter_arg(name)
+    Func(_, _, _, parent) => parent.get_filter_arg(name)
+    FilterArg(n, f, parent) =>
+      if n == name {
+        Some(f)
+      } else {
+        parent.get_filter_arg(name)
+      }
+  }
+}
+
+///|
+/// Fast path for single-output filters. Returns the value directly
+/// without callback overhead. Falls back to eval() for multi-output filters.
+fn eval_single(
+  filter : Filter,
+  input : Json,
+  env : Scope,
+) -> Json raise JqError {
+  match filter {
+    Identity => input
+    Field(name) =>
+      match input {
+        Object(map) =>
+          match map.get(name) {
+            Some(v) => v
+            None => Json::null()
+          }
+        Null => Json::null()
+        _ => raise JqError("cannot index " + json_type(input) + " with string")
+      }
+    Index(i) =>
+      match input {
+        Array(arr) => {
+          let idx = if i < 0 { arr.length() + i } else { i }
+          if idx >= 0 && idx < arr.length() {
+            arr[idx]
+          } else {
+            Json::null()
+          }
+        }
+        _ => raise JqError("cannot index " + json_type(input) + " with number")
+      }
+    Literal(v) => v
+    Pipe(left, right) => eval_single(right, eval_single(left, input, env), env)
+    Arith(op, left, right) =>
+      arith_op(
+        op,
+        eval_single(left, input, env),
+        eval_single(right, input, env),
+      )
+    Compare(op, left, right) =>
+      Json::boolean(
+        compare_op(
+          op,
+          eval_single(left, input, env),
+          eval_single(right, input, env),
+        ),
+      )
+    Neg(expr) =>
+      match eval_single(expr, input, env) {
+        Number(n, ..) => Json::number(-n)
+        _ => raise JqError("cannot negate")
+      }
+    FuncCall(name, _args) =>
+      if name.has_prefix("$") {
+        match env.get_var(name) {
+          Some(v) => v
+          None => raise JqError("undefined variable: " + name)
+        }
+      } else {
+        // Fall back to callback eval for builtins
+        let mut result = Json::null()
+        eval(filter, input, env, v => result = v)
+        result
+      }
+    _ => {
+      // Fall back to callback eval
+      let mut result = Json::null()
+      eval(filter, input, env, v => result = v)
+      result
+    }
+  }
+}
+
+///|
+/// Core eval: evaluate a filter against input, yielding results via callback.
+fn eval(
+  filter : Filter,
+  input : Json,
+  env : Scope,
+  yield_ : (Json) -> Unit raise JqError,
+) -> Unit raise JqError {
+  match filter {
+    Identity => yield_(input)
+    RecurseOp => recurse_impl(input, yield_)
+    Field(name) =>
+      match input {
+        Object(map) =>
+          match map.get(name) {
+            Some(v) => yield_(v)
+            None => yield_(Json::null())
+          }
+        Null => yield_(Json::null())
+        _ => raise JqError("cannot index " + json_type(input) + " with string")
+      }
+    Index(i) =>
+      match input {
+        Array(arr) => {
+          let idx = if i < 0 { arr.length() + i } else { i }
+          if idx >= 0 && idx < arr.length() {
+            yield_(arr[idx])
+          } else {
+            yield_(Json::null())
+          }
+        }
+        _ => raise JqError("cannot index " + json_type(input) + " with number")
+      }
+    Slice(start, end) =>
+      match input {
+        Array(arr) => {
+          let len = arr.length()
+          let s = match start {
+            Some(v) => if v < 0 { len + v } else { v }
+            None => 0
+          }
+          let e = match end {
+            Some(v) => if v < 0 { len + v } else { v }
+            None => len
+          }
+          let result : Array[Json] = []
+          for i = s; i < e && i < len; i = i + 1 {
+            if i >= 0 {
+              result.push(arr[i])
+            }
+          }
+          yield_(Json::array(result))
+        }
+        String(str) => {
+          let chars = Array::from_iter(str.iter())
+          let len = chars.length()
+          let s = match start {
+            Some(v) => if v < 0 { len + v } else { v }
+            None => 0
+          }
+          let e = match end {
+            Some(v) => if v < 0 { len + v } else { v }
+            None => len
+          }
+          let buf = StringBuilder::new()
+          for i = s; i < e && i < len; i = i + 1 {
+            if i >= 0 {
+              buf.write_char(chars[i])
+            }
+          }
+          yield_(Json::string(buf.to_string()))
+        }
+        Null => yield_(Json::null())
+        _ => raise JqError("cannot slice " + json_type(input))
+      }
+    Iterate =>
+      match input {
+        Array(arr) =>
+          for i = 0; i < arr.length(); i = i + 1 {
+            yield_(arr[i])
+          }
+        Object(map) => map.each((_k, v) => yield_(v))
+        _ => raise JqError("cannot iterate over " + json_type(input))
+      }
+    Pipe(left, right) =>
+      eval(left, input, env, mid => eval(right, mid, env, yield_))
+    Comma(left, right) => {
+      eval(left, input, env, yield_)
+      eval(right, input, env, yield_)
+    }
+    Literal(v) => yield_(v)
+    ArrayConstruct(None) => yield_(Json::array([]))
+    ArrayConstruct(Some(expr)) => {
+      let result : Array[Json] = []
+      eval(expr, input, env, v => result.push(v))
+      yield_(Json::array(result))
+    }
+    ObjectConstruct(fields) =>
+      eval_object_construct(fields, 0, Map::new(), input, env, yield_)
+    Paren(expr) => eval(expr, input, env, yield_)
+    Try(expr) => eval(expr, input, env, yield_) catch { JqError(_) => () }
+    TryCatch(expr, handler) =>
+      eval(expr, input, env, yield_) catch {
+        JqError(msg) => eval(handler, Json::string(msg), env, yield_)
+      }
+    IfThenElse(cond, then_branch, else_branch) =>
+      eval(cond, input, env, cv => {
+        if is_truthy(cv) {
+          eval(then_branch, input, env, yield_)
+        } else {
+          eval(else_branch, input, env, yield_)
+        }
+      })
+    Binding(var_name, expr, body) =>
+      eval(expr, input, env, v => {
+        let new_env = env.bind_var(var_name, v)
+        eval(body, input, new_env, yield_)
+      })
+    Reduce(iter_expr, var_name, init, update) => {
+      let mut acc = eval_single(init, input, env)
+      eval(iter_expr, input, env, v => {
+        let new_env = env.bind_var(var_name, v)
+        acc = eval_single(update, acc, new_env)
+      })
+      yield_(acc)
+    }
+    FuncDef(name, params, body, rest) => {
+      let new_env = env.bind_func(name, params, body)
+      eval(rest, input, new_env, yield_)
+    }
+    FuncCall(name, args) => eval_func_call(name, args, input, env, yield_)
+    DynIndex(expr) =>
+      eval(expr, input, env, idx => dyn_index_impl(input, idx, yield_))
+    PostfixDynIndex(base, idx_expr) =>
+      eval(base, input, env, base_val => {
+        eval(idx_expr, input, env, idx => dyn_index_impl(base_val, idx, yield_))
+      })
+    DynSlice(base, start_expr, end_expr) =>
+      eval(base, input, env, base_val => {
+        let mut s : Int? = None
+        let mut e : Int? = None
+        match start_expr {
+          Some(se) =>
+            eval(se, input, env, sv => {
+              match sv {
+                Number(n, ..) => s = Some(n.floor().to_int())
+                _ => raise JqError("slice index must be a number")
+              }
+            })
+          None => ()
+        }
+        match end_expr {
+          Some(ee) =>
+            eval(ee, input, env, ev => {
+              match ev {
+                Number(n, ..) => e = Some(n.floor().to_int())
+                _ => raise JqError("slice index must be a number")
+              }
+            })
+          None => ()
+        }
+        match base_val {
+          Array(arr) => {
+            let len = arr.length()
+            let start = match s {
+              Some(v) => if v < 0 { len + v } else { v }
+              None => 0
+            }
+            let end = match e {
+              Some(v) => if v < 0 { len + v } else { v }
+              None => len
+            }
+            let result : Array[Json] = []
+            for i = start; i < end && i < len; i = i + 1 {
+              if i >= 0 {
+                result.push(arr[i])
+              }
+            }
+            yield_(Json::array(result))
+          }
+          String(str) => {
+            let chars = Array::from_iter(str.iter())
+            let len = chars.length()
+            let start = match s {
+              Some(v) => if v < 0 { len + v } else { v }
+              None => 0
+            }
+            let end = match e {
+              Some(v) => if v < 0 { len + v } else { v }
+              None => len
+            }
+            let buf = StringBuilder::new()
+            for i = start; i < end && i < len; i = i + 1 {
+              if i >= 0 {
+                buf.write_char(chars[i])
+              }
+            }
+            yield_(Json::string(buf.to_string()))
+          }
+          Null => yield_(Json::null())
+          _ => raise JqError("cannot slice " + json_type(base_val))
+        }
+      })
+    Neg(expr) =>
+      eval(expr, input, env, v => {
+        match v {
+          Number(n, ..) => yield_(Json::number(-n))
+          _ => {
+            let desc = match v {
+              String(s) =>
+                if s.iter().count() > 15 {
+                  let buf = StringBuilder::new()
+                  let mut count = 0
+                  s
+                  .iter()
+                  .each(c => {
+                    if count < 15 {
+                      buf.write_char(c)
+                      count += 1
+                    }
+                  })
+                  "\"" + buf.to_string() + "...\""
+                } else {
+                  "\"" + s + "\""
+                }
+              _ => v.stringify()
+            }
+            raise JqError(json_type(v) + " (" + desc + ") cannot be negated")
+          }
+        }
+      })
+    Arith(op, left, right) =>
+      eval(left, input, env, lv => {
+        eval(right, input, env, rv => yield_(arith_op(op, lv, rv)))
+      })
+    Compare(op, left, right) =>
+      eval(left, input, env, lv => {
+        eval(right, input, env, rv => {
+          yield_(Json::boolean(compare_op(op, lv, rv)))
+        })
+      })
+    LogicAnd(left, right) =>
+      eval(left, input, env, lv => {
+        if is_truthy(lv) {
+          eval(right, input, env, rv => yield_(Json::boolean(is_truthy(rv))))
+        } else {
+          yield_(Json::boolean(false))
+        }
+      })
+    LogicOr(left, right) =>
+      eval(left, input, env, lv => {
+        if is_truthy(lv) {
+          yield_(Json::boolean(true))
+        } else {
+          eval(right, input, env, rv => yield_(Json::boolean(is_truthy(rv))))
+        }
+      })
+  }
+}
+
+///|
+fn eval_object_construct(
+  fields : Array[(ObjKey, Filter)],
+  idx : Int,
+  acc : Map[String, Json],
+  input : Json,
+  env : Scope,
+  yield_ : (Json) -> Unit raise JqError,
+) -> Unit raise JqError {
+  if idx >= fields.length() {
+    yield_(Json::object(acc))
+    return
+  }
+  let (key, value_filter) = fields[idx]
+  match key {
+    StrKey(name) =>
+      eval(value_filter, input, env, v => {
+        let new_acc = acc.copy()
+        new_acc[name] = v
+        eval_object_construct(fields, idx + 1, new_acc, input, env, yield_)
+      })
+    ExprKey(key_expr) =>
+      eval(key_expr, input, env, k => {
+        match k {
+          String(name) =>
+            eval(value_filter, input, env, v => {
+              let new_acc = acc.copy()
+              new_acc[name] = v
+              eval_object_construct(
+                fields,
+                idx + 1,
+                new_acc,
+                input,
+                env,
+                yield_,
+              )
+            })
+          _ => raise JqError("object key must be a string")
+        }
+      })
+  }
+}
+
+///|
+fn dyn_index_impl(
+  base : Json,
+  idx : Json,
+  yield_ : (Json) -> Unit raise JqError,
+) -> Unit raise JqError {
+  match (base, idx) {
+    (Array(arr), Number(n, ..)) => {
+      let i = n.to_int()
+      let actual = if i < 0 { arr.length() + i } else { i }
+      if actual >= 0 && actual < arr.length() {
+        yield_(arr[actual])
+      } else {
+        yield_(Json::null())
+      }
+    }
+    (Object(map), String(k)) =>
+      match map.get(k) {
+        Some(v) => yield_(v)
+        None => yield_(Json::null())
+      }
+    (Null, _) => yield_(Json::null())
+    _ =>
+      raise JqError(
+        "cannot index " + json_type(base) + " with " + json_type(idx),
+      )
+  }
+}

@@ -1,0 +1,12 @@
+import {
+  "mizchi/jq",
+  "moonbitlang/core/json",
+  "moonbitlang/core/argparse",
+  "moonbitlang/async",
+  "moonbitlang/async/stdio",
+}
+
+options(
+  "is-main": true,
+  targets: { "main.mbt": [ "native" ] },
+)
