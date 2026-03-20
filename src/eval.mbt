@@ -121,11 +121,34 @@ fn eval_single(
           eval_single(right, input, env),
         ),
       )
-    Neg(expr) =>
-      match eval_single(expr, input, env) {
+    Neg(expr) => {
+      let v = eval_single(expr, input, env)
+      match v {
         Number(n, ..) => Json::number(-n)
-        _ => raise JqError("cannot negate")
+        _ => {
+          let desc = match v {
+            String(s) =>
+              if s.iter().count() > 10 {
+                let buf = StringBuilder::new()
+                let mut count = 0
+                s
+                .iter()
+                .each(c => {
+                  if count < 10 {
+                    buf.write_char(c)
+                    count += 1
+                  }
+                })
+                "\"" + buf.to_string() + "..."
+              } else {
+                "\"" + s + "\""
+              }
+            _ => v.stringify()
+          }
+          raise JqError(json_type(v) + " (" + desc + ") cannot be negated")
+        }
       }
+    }
     FuncCall(name, _args) =>
       if name.has_prefix("$") {
         match env.get_var(name) {
@@ -247,11 +270,29 @@ fn eval(
     ObjectConstruct(fields) =>
       eval_object_construct(fields, 0, Map::new(), input, env, yield_)
     Paren(expr) => eval(expr, input, env, yield_)
-    Try(expr) => eval(expr, input, env, yield_) catch { JqError(_) => () }
-    TryCatch(expr, handler) =>
-      eval(expr, input, env, yield_) catch {
-        JqError(msg) => eval(handler, Json::string(msg), env, yield_)
+    Try(expr) => {
+      let results : Array[Json] = []
+      eval(expr, input, env, v => results.push(v)) catch {
+        JqError(_) => ()
       }
+      for r in results {
+        yield_(r)
+      }
+    }
+    TryCatch(expr, handler) => {
+      let results : Array[Json] = []
+      let mut caught_msg : String? = None
+      eval(expr, input, env, v => results.push(v)) catch {
+        JqError(msg) => caught_msg = Some(msg)
+      }
+      for r in results {
+        yield_(r)
+      }
+      match caught_msg {
+        Some(msg) => eval(handler, Json::string(msg), env, yield_)
+        None => ()
+      }
+    }
     IfThenElse(cond, then_branch, else_branch) =>
       eval(cond, input, env, cv => {
         if is_truthy(cv) {
@@ -366,18 +407,18 @@ fn eval(
           _ => {
             let desc = match v {
               String(s) =>
-                if s.iter().count() > 15 {
+                if s.iter().count() > 10 {
                   let buf = StringBuilder::new()
                   let mut count = 0
                   s
                   .iter()
                   .each(c => {
-                    if count < 15 {
+                    if count < 10 {
                       buf.write_char(c)
                       count += 1
                     }
                   })
-                  "\"" + buf.to_string() + "...\""
+                  "\"" + buf.to_string() + "..."
                 } else {
                   "\"" + s + "\""
                 }

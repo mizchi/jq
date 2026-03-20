@@ -80,7 +80,7 @@ test "jq_compat_8: {x:-1},{x:-.},{x:-.|abs}" {
   inspect(
     run_jq("{x:-1},{x:-.},{x:-.|abs}", "1"),
     content=(
-      #|["ERROR: expected ',' or '}' in object"]
+      #|["{\"x\":-1}", "{\"x\":-1}", "{\"x\":1}"]
     ),
   )
 }
@@ -1543,7 +1543,7 @@ test "jq_compat_148: try -.? catch ." {
   inspect(
     run_jq("try -.? catch .", "\"foo\""),
     content=(
-      #|[]
+      #|["\"string (\\\"foo\\\") cannot be negated\""]
     ),
   )
 }
@@ -2341,7 +2341,7 @@ test "jq_compat_222: try -. catch ." {
   inspect(
     run_jq("try -. catch .", "\"very-long-long-long-long-string\""),
     content=(
-      #|["\"string (\\\"very-long-long-...\\\") cannot be negated\""]
+      #|["\"string (\\\"very-long-...) cannot be negated\""]
     ),
   )
 }
@@ -2351,7 +2351,7 @@ test "jq_compat_223: \"x\" * range(0; 12; 2) + \"☆\" * 8 | try -. catch ." {
   inspect(
     run_jq("\"x\" * range(0; 12; 2) + \"☆\" * 8 | try -. catch .", "null"),
     content=(
-      #|["\"string (\\\"☆☆☆☆☆☆☆☆\\\") cannot be negated\"", "\"string (\\\"xx☆☆☆☆☆☆☆☆\\\") cannot be negated\"", "\"string (\\\"xxxx☆☆☆☆☆☆☆☆\\\") cannot be negated\"", "\"string (\\\"xxxxxx☆☆☆☆☆☆☆☆\\\") cannot be negated\"", "\"string (\\\"xxxxxxxx☆☆☆☆☆☆☆...\\\") cannot be negated\"", "\"string (\\\"xxxxxxxxxx☆☆☆☆☆...\\\") cannot be negated\""]
+      #|["\"string (\\\"☆☆☆☆☆☆☆☆\\\") cannot be negated\"", "\"string (\\\"xx☆☆☆☆☆☆☆☆\\\") cannot be negated\"", "\"string (\\\"xxxx☆☆☆☆☆☆...) cannot be negated\"", "\"string (\\\"xxxxxx☆☆☆☆...) cannot be negated\"", "\"string (\\\"xxxxxxxx☆☆...) cannot be negated\"", "\"string (\\\"xxxxxxxxxx...) cannot be negated\""]
     ),
   )
 }
@@ -2681,7 +2681,7 @@ test "jq_compat_253: fromjson | isnan" {
   inspect(
     run_jq("fromjson | isnan", "\"nan\""),
     content=(
-      #|["ERROR: invalid JSON string"]
+      #|["true"]
     ),
   )
 }

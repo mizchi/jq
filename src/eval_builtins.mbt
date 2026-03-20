@@ -235,10 +235,19 @@ fn eval_builtin(
     "fromjson" =>
       match input {
         String(s) => {
-          let json = @json.parse(s) catch {
-            _ => raise JqError("invalid JSON string")
+          let trimmed = s.trim(chars=" \t\n\r").to_string()
+          if trimmed == "nan" || trimmed == "NaN" {
+            yield_(Json::number(0.0 / 0.0))
+          } else if trimmed == "infinity" || trimmed == "Infinity" {
+            yield_(Json::number(1.0 / 0.0))
+          } else if trimmed == "-infinity" || trimmed == "-Infinity" {
+            yield_(Json::number(-1.0 / 0.0))
+          } else {
+            let json = @json.parse(s) catch {
+              _ => raise JqError("invalid JSON string")
+            }
+            yield_(json)
           }
-          yield_(json)
         }
         _ => raise JqError("fromjson requires string input")
       }

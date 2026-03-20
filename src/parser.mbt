@@ -588,13 +588,26 @@ fn Parser::parse_object_construct(self : Parser) -> Filter raise JqError {
 }
 
 ///|
+/// Parse pipe-separated bindings without consuming commas.
+/// Used for object values where `{x: a | b}` means `{x: (a | b)}`.
+fn Parser::parse_object_value(self : Parser) -> Filter raise JqError {
+  let mut left = self.parse_binding()
+  while self.peek() == Pipe {
+    ignore(self.advance())
+    let right = self.parse_binding()
+    left = Pipe(left, right)
+  }
+  left
+}
+
+///|
 fn Parser::parse_object_field(self : Parser) -> (ObjKey, Filter) raise JqError {
   match self.peek() {
     Ident(name) => {
       ignore(self.advance())
       if self.peek() == Colon {
         ignore(self.advance())
-        let value = self.parse_binding()
+        let value = self.parse_object_value()
         (StrKey(name), value)
       } else {
         (StrKey(name), Field(name))
@@ -603,7 +616,7 @@ fn Parser::parse_object_field(self : Parser) -> (ObjKey, Filter) raise JqError {
     Str(s) => {
       ignore(self.advance())
       self.expect(Colon)
-      let value = self.parse_binding()
+      let value = self.parse_object_value()
       (StrKey(s), value)
     }
     LParen => {
@@ -611,14 +624,14 @@ fn Parser::parse_object_field(self : Parser) -> (ObjKey, Filter) raise JqError {
       let key_expr = self.parse_pipe()
       self.expect(RParen)
       self.expect(Colon)
-      let value = self.parse_binding()
+      let value = self.parse_object_value()
       (ExprKey(key_expr), value)
     }
     Variable(name) => {
       ignore(self.advance())
       if self.peek() == Colon {
         ignore(self.advance())
-        let value = self.parse_binding()
+        let value = self.parse_object_value()
         (StrKey(name), value)
       } else {
         (StrKey(name), FuncCall("$" + name, []))

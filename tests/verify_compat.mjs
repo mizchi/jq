@@ -21,7 +21,7 @@ try {
 function parseMbtTests(content) {
   const results = [];
   const re =
-    /test "jq_compat_(\d+): [^"]*" \{[\s\S]*?run_jq\("((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\)[\s\S]*?content=(\([^)]*\)|"[^"]*"),?\s*\)\s*\}/g;
+    /test "jq_compat_(\d+): [^"]*" \{[\s\S]*?run_jq\("((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\)[\s\S]*?content=(\([\s\S]*?\n\s*\)|"[^"]*"),?\s*\)\s*\}/g;
   let m;
   while ((m = re.exec(content)) !== null) {
     const num = parseInt(m[1]);
