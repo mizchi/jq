@@ -74,8 +74,8 @@ fn eval_builtin(
           map.each((k, _v) => ks.push(k))
           ks.sort()
           let result : Array[Json] = []
-          for i = 0; i < ks.length(); i = i + 1 {
-            result.push(Json::string(ks[i]))
+          for k in ks {
+            result.push(Json::string(k))
           }
           yield_(Json::array(result))
         }
@@ -115,8 +115,8 @@ fn eval_builtin(
       match input {
         Array(arr) => {
           let mut acc : Json = Json::null()
-          for i = 0; i < arr.length(); i = i + 1 {
-            acc = arith_op(ArithOp::Add, acc, arr[i])
+          for v in arr {
+            acc = arith_op(ArithOp::Add, acc, v)
           }
           yield_(acc)
         }
@@ -294,8 +294,8 @@ fn eval_builtin(
       match input {
         Array(arr) => {
           let result : Map[String, Json] = Map::new()
-          for i = 0; i < arr.length(); i = i + 1 {
-            match arr[i] {
+          for item in arr {
+            match item {
               Object(entry) => {
                 let key = match entry.get("key") {
                   Some(String(k)) => k
@@ -378,8 +378,8 @@ fn eval_builtin(
       match input {
         Array(arr) => {
           let result : Array[Json] = []
-          for i = 0; i < arr.length(); i = i + 1 {
-            eval(f, arr[i], env, v => result.push(v))
+          for item in arr {
+            eval(f, item, env, v => result.push(v))
           }
           yield_(Json::array(result))
         }
@@ -399,8 +399,8 @@ fn eval_builtin(
         }
         Array(arr) => {
           let result : Array[Json] = []
-          for i = 0; i < arr.length(); i = i + 1 {
-            eval(f, arr[i], env, v => result.push(v))
+          for item in arr {
+            eval(f, item, env, v => result.push(v))
           }
           yield_(Json::array(result))
         }
@@ -420,7 +420,7 @@ fn eval_builtin(
           (Array(arr), Number(n, ..)) =>
             yield_(
               Json::boolean(
-                not(n != n) && n.to_int() >= 0 && n.to_int() < arr.length(),
+                not(is_nan(n)) && n.to_int() >= 0 && n.to_int() < arr.length(),
               ),
             )
           _ => raise JqError("has: invalid arguments")
@@ -432,8 +432,8 @@ fn eval_builtin(
         match input {
           Array(arr) => {
             let mut found = false
-            for i = 0; i < arr.length(); i = i + 1 {
-              if is_truthy(arr[i]) {
+            for v in arr {
+              if is_truthy(v) {
                 found = true
                 break
               }
@@ -447,8 +447,8 @@ fn eval_builtin(
         match input {
           Array(arr) => {
             let mut found = false
-            for i = 0; i < arr.length(); i = i + 1 {
-              eval(f, arr[i], env, v => if is_truthy(v) { found = true })
+            for item in arr {
+              eval(f, item, env, v => if is_truthy(v) { found = true })
               if found {
                 break
               }
@@ -483,8 +483,8 @@ fn eval_builtin(
         match input {
           Array(arr) => {
             let mut ok = true
-            for i = 0; i < arr.length(); i = i + 1 {
-              if not(is_truthy(arr[i])) {
+            for v in arr {
+              if not(is_truthy(v)) {
                 ok = false
                 break
               }
@@ -498,8 +498,8 @@ fn eval_builtin(
         match input {
           Array(arr) => {
             let mut ok = true
-            for i = 0; i < arr.length(); i = i + 1 {
-              eval(f, arr[i], env, v => if not(is_truthy(v)) { ok = false })
+            for item in arr {
+              eval(f, item, env, v => if not(is_truthy(v)) { ok = false })
               if not(ok) {
                 break
               }
@@ -537,20 +537,20 @@ fn eval_builtin(
       match input {
         Array(arr) => {
           let keyed : Array[(Json, Json)] = []
-          for i = 0; i < arr.length(); i = i + 1 {
+          for item in arr {
             let keys : Array[Json] = []
-            eval(f, arr[i], env, v => keys.push(v))
+            eval(f, item, env, v => keys.push(v))
             let key = if keys.length() == 1 {
               keys[0]
             } else {
               Json::array(keys)
             }
-            keyed.push((key, arr[i]))
+            keyed.push((key, item))
           }
           keyed.sort_by((a, b) => compare_json(a.0, b.0))
           let result : Array[Json] = []
-          for i = 0; i < keyed.length(); i = i + 1 {
-            result.push(keyed[i].1)
+          for entry in keyed {
+            result.push(entry.1)
           }
           yield_(Json::array(result))
         }
@@ -565,10 +565,10 @@ fn eval_builtin(
       match input {
         Array(arr) => {
           let keyed : Array[(Json, Json)] = []
-          for i = 0; i < arr.length(); i = i + 1 {
+          for item in arr {
             let mut key = Json::null()
-            eval(f, arr[i], env, v => key = v)
-            keyed.push((key, arr[i]))
+            eval(f, item, env, v => key = v)
+            keyed.push((key, item))
           }
           keyed.sort_by((a, b) => compare_json(a.0, b.0))
           let groups : Array[Json] = []
@@ -600,10 +600,10 @@ fn eval_builtin(
       match input {
         Array(arr) => {
           let keyed : Array[(Json, Json)] = []
-          for i = 0; i < arr.length(); i = i + 1 {
+          for item in arr {
             let mut key = Json::null()
-            eval(f, arr[i], env, v => key = v)
-            keyed.push((key, arr[i]))
+            eval(f, item, env, v => key = v)
+            keyed.push((key, item))
           }
           keyed.sort_by((a, b) => compare_json(a.0, b.0))
           let result : Array[Json] = []
@@ -1006,8 +1006,8 @@ fn eval_builtin(
         match paths_val {
           Array(arr) => {
             let paths : Array[Array[Json]] = []
-            for i = 0; i < arr.length(); i = i + 1 {
-              match arr[i] {
+            for item in arr {
+              match item {
                 Array(p) => paths.push(p)
                 _ => raise JqError("delpaths: each path must be an array")
               }
@@ -1111,33 +1111,9 @@ fn eval_builtin(
       guard args.length() == 1 else {
         raise JqError("getpath takes 1 argument")
       }
-      eval(args[0], input, env, path => {
-        match path {
-          Array(parts) => {
-            let mut current = input
-            for i = 0; i < parts.length(); i = i + 1 {
-              match (current, parts[i]) {
-                (Object(map), String(k)) =>
-                  current = match map.get(k) {
-                    Some(v) => v
-                    None => Json::null()
-                  }
-                (Array(arr), Number(n, ..)) => {
-                  let idx = n.to_int()
-                  current = if idx >= 0 && idx < arr.length() {
-                    arr[idx]
-                  } else {
-                    Json::null()
-                  }
-                }
-                _ => {
-                  current = Json::null()
-                  break
-                }
-              }
-            }
-            yield_(current)
-          }
+      eval(args[0], input, env, path_val => {
+        match path_val {
+          Array(parts) => yield_(getpath_impl(input, parts))
           _ => raise JqError("getpath: argument must be an array")
         }
       })
@@ -1155,7 +1131,7 @@ fn eval_builtin(
       }
     "isnan" =>
       match input {
-        Number(n, ..) => yield_(Json::boolean(n != n))
+        Number(n, ..) => yield_(Json::boolean(is_nan(n)))
         _ => yield_(Json::boolean(false))
       }
     "isnormal" =>
@@ -1163,7 +1139,7 @@ fn eval_builtin(
         Number(n, ..) =>
           yield_(
             Json::boolean(
-              n == n && n != 0.0 && n != 1.0 / 0.0 && n != -1.0 / 0.0,
+              not(is_nan(n)) && n != 0.0 && n != 1.0 / 0.0 && n != -1.0 / 0.0,
             ),
           )
         _ => yield_(Json::boolean(false))
@@ -1171,7 +1147,9 @@ fn eval_builtin(
     "isfinite" =>
       match input {
         Number(n, ..) =>
-          yield_(Json::boolean(n == n && n != 1.0 / 0.0 && n != -1.0 / 0.0))
+          yield_(
+            Json::boolean(not(is_nan(n)) && n != 1.0 / 0.0 && n != -1.0 / 0.0),
+          )
         _ => yield_(Json::boolean(false))
       }
     "abs" | "fabs" =>
@@ -1236,8 +1214,8 @@ fn eval_builtin(
       match input {
         Array(arr) => {
           let buf = StringBuilder::new()
-          for i = 0; i < arr.length(); i = i + 1 {
-            match arr[i] {
+          for item in arr {
+            match item {
               Number(n, ..) => {
                 let cp = n.to_int()
                 if cp >= 0 && cp <= 1114111 {
@@ -1406,8 +1384,8 @@ fn eval_builtin(
       match input {
         Array(arr) => {
           let mut max_len = 0
-          for i = 0; i < arr.length(); i = i + 1 {
-            match arr[i] {
+          for item in arr {
+            match item {
               Array(sub) => if sub.length() > max_len { max_len = sub.length() }
               _ => ()
             }
@@ -1415,8 +1393,8 @@ fn eval_builtin(
           let result : Array[Json] = []
           for j = 0; j < max_len; j = j + 1 {
             let col : Array[Json] = []
-            for i = 0; i < arr.length(); i = i + 1 {
-              match arr[i] {
+            for item in arr {
+              match item {
                 Array(sub) =>
                   if j < sub.length() {
                     col.push(sub[j])
@@ -1654,6 +1632,7 @@ fn eval_builtin(
         String(s) => {
           let bytes = string_to_utf8(s)
           let buf = StringBuilder::new()
+          let hex = Array::from_iter("0123456789ABCDEF".iter())
           for i = 0; i < bytes.length(); i = i + 1 {
             let b = bytes[i].to_int()
             if (b >= 'A'.to_int() && b <= 'Z'.to_int()) ||
@@ -1665,10 +1644,9 @@ fn eval_builtin(
               b == '~'.to_int() {
               buf.write_char(b.unsafe_to_char())
             } else {
-              let hex = "0123456789ABCDEF"
               buf.write_char('%')
-              buf.write_char(hex.iter().to_array()[(b >> 4) & 0xf])
-              buf.write_char(hex.iter().to_array()[b & 0xf])
+              buf.write_char(hex[(b >> 4) & 0xf])
+              buf.write_char(hex[b & 0xf])
             }
           }
           yield_(Json::string(buf.to_string()))

@@ -39,13 +39,13 @@ fn arith_op(op : ArithOp, left : Json, right : Json) -> Json raise JqError {
       )
     }
     (Mod, Number(a, ..), Number(b, ..)) =>
-      if a != a || b != b {
+      if is_nan(a) || is_nan(b) {
         Json::number(0.0 / 0.0)
       } else {
         Json::number((a.to_int() % b.to_int()).to_double())
       }
     (Mul, String(_), Number(n, ..)) =>
-      if n != n || n < 0.0 {
+      if is_nan(n) || n < 0.0 {
         Json::null()
       } else if n < 1.0 {
         Json::string("")
@@ -62,7 +62,7 @@ fn arith_op(op : ArithOp, left : Json, right : Json) -> Json raise JqError {
         Json::string(buf.to_string())
       }
     (Mul, Number(n, ..), String(_)) =>
-      if n != n || n < 0.0 {
+      if is_nan(n) || n < 0.0 {
         Json::null()
       } else if n < 1.0 {
         Json::string("")
@@ -263,8 +263,8 @@ fn recurse_impl(
   yield_(input)
   match input {
     Array(arr) =>
-      for i = 0; i < arr.length(); i = i + 1 {
-        recurse_impl(arr[i], yield_)
+      for v in arr {
+        recurse_impl(v, yield_)
       }
     Object(map) => map.each((_k, v) => recurse_impl(v, yield_))
     _ => ()
@@ -274,15 +274,15 @@ fn recurse_impl(
 ///|
 /// Flatten nested arrays up to a given depth.
 fn flatten_impl(arr : Array[Json], depth : Int, result : Array[Json]) -> Unit {
-  for i = 0; i < arr.length(); i = i + 1 {
-    match arr[i] {
+  for item in arr {
+    match item {
       Array(sub) =>
         if depth > 0 {
           flatten_impl(sub, depth - 1, result)
         } else {
-          result.push(arr[i])
+          result.push(item)
         }
-      _ => result.push(arr[i])
+      _ => result.push(item)
     }
   }
 }
@@ -465,6 +465,36 @@ fn collect_pattern_vars(pattern : Pattern, vars : Array[String]) -> Unit {
         collect_pattern_vars(pat, vars)
       }
   }
+}
+
+///|
+/// Format a JSON value for negation error messages.
+fn neg_error_desc(v : Json) -> String {
+  match v {
+    String(s) =>
+      if s.iter().count() > 10 {
+        let buf = StringBuilder::new()
+        let mut count = 0
+        s
+        .iter()
+        .each(c => {
+          if count < 10 {
+            buf.write_char(c)
+            count += 1
+          }
+        })
+        "\"" + buf.to_string() + "..."
+      } else {
+        "\"" + s + "\""
+      }
+    _ => v.stringify()
+  }
+}
+
+///|
+/// Check if a Double is NaN.
+fn is_nan(n : Double) -> Bool {
+  n != n
 }
 
 ///|

@@ -262,14 +262,20 @@ fn getpath_impl(input : Json, path : Array[Json]) -> Json {
 /// Set the value at a given path in a JSON value, creating intermediate
 /// objects/arrays as needed.
 fn setpath_impl(input : Json, path : Array[Json], value : Json) -> Json {
-  if path.is_empty() {
+  setpath_at(input, path, 0, value)
+}
+
+///|
+fn setpath_at(
+  input : Json,
+  path : Array[Json],
+  depth : Int,
+  value : Json,
+) -> Json {
+  if depth >= path.length() {
     return value
   }
-  let key = path[0]
-  let rest : Array[Json] = []
-  for i = 1; i < path.length(); i = i + 1 {
-    rest.push(path[i])
-  }
+  let key = path[depth]
   match key {
     String(k) => {
       let map = match input {
@@ -280,7 +286,7 @@ fn setpath_impl(input : Json, path : Array[Json], value : Json) -> Json {
         Some(v) => v
         None => Json::null()
       }
-      map[k] = setpath_impl(child, rest, value)
+      map[k] = setpath_at(child, path, depth + 1, value)
       Json::object(map)
     }
     Number(n, ..) => {
@@ -296,7 +302,7 @@ fn setpath_impl(input : Json, path : Array[Json], value : Json) -> Json {
       while arr.length() <= i {
         arr.push(Json::null())
       }
-      arr[i] = setpath_impl(arr[i], rest, value)
+      arr[i] = setpath_at(arr[i], path, depth + 1, value)
       Json::array(arr)
     }
     _ => input
@@ -336,11 +342,16 @@ fn delpaths_impl(input : Json, paths : Array[Array[Json]]) -> Json {
 ///|
 /// Delete a single path from a JSON value.
 fn delpath_single(input : Json, path : Array[Json]) -> Json {
-  if path.is_empty() {
+  delpath_at(input, path, 0)
+}
+
+///|
+fn delpath_at(input : Json, path : Array[Json], depth : Int) -> Json {
+  if depth >= path.length() {
     return Json::null()
   }
-  if path.length() == 1 {
-    let key = path[0]
+  let key = path[depth]
+  if depth == path.length() - 1 {
     match (input, key) {
       (Object(map), String(k)) => {
         let new_map = Map::new()
@@ -365,17 +376,12 @@ fn delpath_single(input : Json, path : Array[Json]) -> Json {
       _ => input
     }
   } else {
-    let key = path[0]
-    let rest : Array[Json] = []
-    for i = 1; i < path.length(); i = i + 1 {
-      rest.push(path[i])
-    }
     match (input, key) {
       (Object(map), String(k)) =>
         match map.get(k) {
           Some(child) => {
             let new_map = map.copy()
-            new_map[k] = delpath_single(child, rest)
+            new_map[k] = delpath_at(child, path, depth + 1)
             Json::object(new_map)
           }
           None => input
@@ -385,7 +391,7 @@ fn delpath_single(input : Json, path : Array[Json]) -> Json {
         let actual = if idx < 0 { arr.length() + idx } else { idx }
         if actual >= 0 && actual < arr.length() {
           let new_arr = arr.copy()
-          new_arr[actual] = delpath_single(arr[actual], rest)
+          new_arr[actual] = delpath_at(arr[actual], path, depth + 1)
           Json::array(new_arr)
         } else {
           input

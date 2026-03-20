@@ -135,28 +135,10 @@ fn eval_single(
       let v = eval_single(expr, input, env)
       match v {
         Number(n, ..) => Json::number(-n)
-        _ => {
-          let desc = match v {
-            String(s) =>
-              if s.iter().count() > 10 {
-                let buf = StringBuilder::new()
-                let mut count = 0
-                s
-                .iter()
-                .each(c => {
-                  if count < 10 {
-                    buf.write_char(c)
-                    count += 1
-                  }
-                })
-                "\"" + buf.to_string() + "..."
-              } else {
-                "\"" + s + "\""
-              }
-            _ => v.stringify()
-          }
-          raise JqError(json_type(v) + " (" + desc + ") cannot be negated")
-        }
+        _ =>
+          raise JqError(
+            json_type(v) + " (" + neg_error_desc(v) + ") cannot be negated",
+          )
       }
     }
     FuncCall(name, _args) =>
@@ -275,8 +257,8 @@ fn eval(
     Iterate =>
       match input {
         Array(arr) =>
-          for i = 0; i < arr.length(); i = i + 1 {
-            yield_(arr[i])
+          for v in arr {
+            yield_(v)
           }
         Object(map) => map.each((_k, v) => yield_(v))
         _ => raise JqError("cannot iterate over " + json_type(input))
@@ -360,7 +342,10 @@ fn eval(
           Some(se) =>
             eval(se, input, env, sv => {
               match sv {
-                Number(n, ..) => if not(n != n) { s = Some(n.floor().to_int()) }
+                Number(n, ..) =>
+                  if not(is_nan(n)) {
+                    s = Some(n.floor().to_int())
+                  }
                 _ => raise JqError("slice index must be a number")
               }
             })
@@ -371,7 +356,7 @@ fn eval(
             eval(ee, input, env, ev => {
               match ev {
                 Number(n, ..) =>
-                  if not(n != n) {
+                  if not(is_nan(n)) {
                     let floored = n.floor()
                     // jq uses ceil for end index on non-integer floats
                     let idx = if floored < n {
@@ -432,28 +417,10 @@ fn eval(
       eval(expr, input, env, v => {
         match v {
           Number(n, ..) => yield_(Json::number(-n))
-          _ => {
-            let desc = match v {
-              String(s) =>
-                if s.iter().count() > 10 {
-                  let buf = StringBuilder::new()
-                  let mut count = 0
-                  s
-                  .iter()
-                  .each(c => {
-                    if count < 10 {
-                      buf.write_char(c)
-                      count += 1
-                    }
-                  })
-                  "\"" + buf.to_string() + "..."
-                } else {
-                  "\"" + s + "\""
-                }
-              _ => v.stringify()
-            }
-            raise JqError(json_type(v) + " (" + desc + ") cannot be negated")
-          }
+          _ =>
+            raise JqError(
+              json_type(v) + " (" + neg_error_desc(v) + ") cannot be negated",
+            )
         }
       })
     Arith(op, left, right) =>
@@ -660,7 +627,7 @@ fn dyn_index_impl(
 ) -> Unit raise JqError {
   match (base, idx) {
     (Array(arr), Number(n, ..)) =>
-      if n != n {
+      if is_nan(n) {
         yield_(Json::null())
       } else {
         let i = n.to_int()

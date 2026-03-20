@@ -327,18 +327,13 @@ fn Parser::parse_or(self : Parser) -> Filter raise JqError {
 
 ///|
 fn Parser::parse_and(self : Parser) -> Filter raise JqError {
-  let mut left = self.parse_not()
+  let mut left = self.parse_compare()
   while self.peek() == KwAnd {
     ignore(self.advance())
-    let right = self.parse_not()
+    let right = self.parse_compare()
     left = LogicAnd(left, right)
   }
   left
-}
-
-///|
-fn Parser::parse_not(self : Parser) -> Filter raise JqError {
-  self.parse_compare()
 }
 
 ///|
