@@ -306,6 +306,10 @@ fn json_contains(a : Json, b : Json) -> Bool {
 
 ///|
 /// Recursively apply a filter to all sub-values (walk builtin).
+/// Matches jq semantics:
+/// - Arrays: [.[] | walk(f)] — collect all walk outputs per element, then apply f
+/// - Objects: reduce pattern — use first walk output per value, then apply f
+/// - Scalars: apply f directly
 fn walk_impl(
   input : Json,
   f : Filter,
@@ -313,48 +317,36 @@ fn walk_impl(
   yield_ : (Json) -> Unit raise JqError,
 ) -> Unit raise JqError {
   match input {
-    Array(arr) =>
-      // Recursively walk each element, collecting all combinations
-      walk_impl_array(arr, 0, [], f, env, built => {
-        let transformed = Json::array(built)
-        eval(f, transformed, env, yield_)
-      })
+    Array(arr) => {
+      // jq: [.[] | walk(f)] — collect ALL walk outputs into one array
+      let collected : Array[Json] = []
+      for i = 0; i < arr.length(); i = i + 1 {
+        walk_impl(arr[i], f, env, walked => collected.push(walked))
+      }
+      let transformed = Json::array(collected)
+      eval(f, transformed, env, yield_)
+    }
     Object(map) => {
-      let keys : Array[String] = []
-      let vals : Array[Json] = []
+      // jq: reduce keys_unsorted[] as $key ({}; . + {($key): ($in[$key] | walk(f))})
+      // reduce uses first output per key; if no output, key is skipped
+      let result : Map[String, Json] = Map::new()
       map.each((k, v) => {
-        keys.push(k)
-        vals.push(v)
-      })
-      walk_impl_array(vals, 0, [], f, env, built => {
-        let result : Map[String, Json] = Map::new()
-        for i = 0; i < keys.length(); i = i + 1 {
-          result[keys[i]] = built[i]
+        let mut found = false
+        walk_impl(v, f, env, walked => {
+          if not(found) {
+            found = true
+            result[k] = walked
+            raise JqError("__walk_break__")
+          }
+        }) catch {
+          JqError("__walk_break__") => ()
+          e => raise e
+          // If walk produced no output, the key is skipped (reduce semantics)
         }
-        let transformed = Json::object(result)
-        eval(f, transformed, env, yield_)
       })
+      let transformed = Json::object(result)
+      eval(f, transformed, env, yield_)
     }
     _ => eval(f, input, env, yield_)
-  }
-}
-
-///|
-fn walk_impl_array(
-  arr : Array[Json],
-  idx : Int,
-  acc : Array[Json],
-  f : Filter,
-  env : Scope,
-  yield_ : (Array[Json]) -> Unit raise JqError,
-) -> Unit raise JqError {
-  if idx >= arr.length() {
-    yield_(acc)
-  } else {
-    walk_impl(arr[idx], f, env, walked => {
-      let new_acc = acc.copy()
-      new_acc.push(walked)
-      walk_impl_array(arr, idx + 1, new_acc, f, env, yield_)
-    })
   }
 }

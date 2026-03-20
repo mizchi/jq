@@ -262,6 +262,29 @@ fn Parser::parse_signed_int(self : Parser) -> Int raise JqError {
 }
 
 ///|
+/// Parse a signed number as a Double, preserving float precision.
+fn Parser::parse_signed_num(self : Parser) -> Double raise JqError {
+  if self.peek() == Minus {
+    ignore(self.advance())
+    match self.peek() {
+      Num(n) => {
+        ignore(self.advance())
+        -n
+      }
+      _ => raise JqError("expected number after '-'")
+    }
+  } else {
+    match self.peek() {
+      Num(n) => {
+        ignore(self.advance())
+        n
+      }
+      _ => raise JqError("expected number")
+    }
+  }
+}
+
+///|
 fn Parser::parse_bracket_suffix(self : Parser) -> Filter raise JqError {
   match self.peek() {
     RBracket => {
@@ -284,17 +307,15 @@ fn Parser::parse_bracket_suffix(self : Parser) -> Filter raise JqError {
       match self.peek() {
         Num(_) | Minus => {
           let saved = self.pos
-          let n = self.parse_signed_int() catch {
-            _ => {
-              self.pos = saved
-              let end_expr = self.parse_pipe()
-              self.expect(RBracket)
-              return DynSlice(Identity, None, Some(end_expr))
-            }
-          }
+          let num = self.parse_signed_num()
+          let end_is_float = num != num.floor()
           if self.peek() == RBracket {
             self.expect(RBracket)
-            Slice(None, Some(n))
+            if end_is_float {
+              DynSlice(Identity, None, Some(Literal(Json::number(num))))
+            } else {
+              Slice(None, Some(num.to_int()))
+            }
           } else {
             // Not a simple number, reparse as expression
             self.pos = saved
@@ -311,7 +332,9 @@ fn Parser::parse_bracket_suffix(self : Parser) -> Filter raise JqError {
       }
     }
     Num(_) | Minus => {
-      let n = self.parse_signed_int()
+      let saved = self.pos
+      let num = self.parse_signed_num()
+      let is_float = num != num.floor()
       match self.peek() {
         Colon => {
           // .[n:end] or .[n:] or .[n:expr]
@@ -319,32 +342,34 @@ fn Parser::parse_bracket_suffix(self : Parser) -> Filter raise JqError {
           match self.peek() {
             RBracket => {
               ignore(self.advance())
-              Slice(Some(n), None)
+              if is_float {
+                DynSlice(Identity, Some(Literal(Json::number(num))), None)
+              } else {
+                Slice(Some(num.to_int()), None)
+              }
             }
             Num(_) | Minus => {
               let saved2 = self.pos
-              let end_n = self.parse_signed_int() catch {
-                _ => {
-                  self.pos = saved2
-                  let end_expr = self.parse_pipe()
-                  self.expect(RBracket)
-                  return DynSlice(
-                    Identity,
-                    Some(Literal(Json::number(n.to_double()))),
-                    Some(end_expr),
-                  )
-                }
-              }
+              let end_num = self.parse_signed_num()
+              let end_is_float = end_num != end_num.floor()
               if self.peek() == RBracket {
                 self.expect(RBracket)
-                Slice(Some(n), Some(end_n))
+                if is_float || end_is_float {
+                  DynSlice(
+                    Identity,
+                    Some(Literal(Json::number(num))),
+                    Some(Literal(Json::number(end_num))),
+                  )
+                } else {
+                  Slice(Some(num.to_int()), Some(end_num.to_int()))
+                }
               } else {
                 self.pos = saved2
                 let end_expr = self.parse_pipe()
                 self.expect(RBracket)
                 DynSlice(
                   Identity,
-                  Some(Literal(Json::number(n.to_double()))),
+                  Some(Literal(Json::number(num))),
                   Some(end_expr),
                 )
               }
@@ -354,30 +379,42 @@ fn Parser::parse_bracket_suffix(self : Parser) -> Filter raise JqError {
               self.expect(RBracket)
               DynSlice(
                 Identity,
-                Some(Literal(Json::number(n.to_double()))),
+                Some(Literal(Json::number(num))),
                 Some(end_expr),
               )
             }
           }
         }
-        Comma => {
-          // .[n,m,...] multi-index
-          let indices : Array[Int] = [n]
-          while self.peek() == Comma {
-            ignore(self.advance())
-            indices.push(self.parse_signed_int())
+        Comma =>
+          if is_float {
+            // Float index — fall through to expression parsing
+            self.pos = saved
+            let expr = self.parse_pipe()
+            self.expect(RBracket)
+            DynIndex(expr)
+          } else {
+            // .[n,m,...] multi-index
+            let n = num.to_int()
+            let indices : Array[Int] = [n]
+            while self.peek() == Comma {
+              ignore(self.advance())
+              indices.push(self.parse_signed_int())
+            }
+            self.expect(RBracket)
+            let mut result : Filter = Index(indices[0])
+            for i = 1; i < indices.length(); i = i + 1 {
+              result = Comma(result, Index(indices[i]))
+            }
+            result
           }
-          self.expect(RBracket)
-          let mut result : Filter = Index(indices[0])
-          for i = 1; i < indices.length(); i = i + 1 {
-            result = Comma(result, Index(indices[i]))
-          }
-          result
-        }
         _ => {
           // .[n]
           self.expect(RBracket)
-          Index(n)
+          if is_float {
+            DynIndex(Literal(Json::number(num)))
+          } else {
+            Index(num.to_int())
+          }
         }
       }
     }

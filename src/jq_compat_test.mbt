@@ -2765,7 +2765,7 @@ test "jq_compat_261: [walk(.,1)]" {
   inspect(
     run_jq("[walk(.,1)]", "{\"x\":0}"),
     content=(
-      #|["[{\"x\":0},1,{\"x\":1},1]"]
+      #|["[{\"x\":0},1]"]
     ),
   )
 }
@@ -2775,7 +2775,7 @@ test "jq_compat_262: walk(select(IN({}, []) | not))" {
   inspect(
     run_jq("walk(select(IN({}, []) | not))", "{\"a\":1,\"b\":[]}"),
     content=(
-      #|[]
+      #|["{\"a\":1}"]
     ),
   )
 }
@@ -2785,7 +2785,7 @@ test "jq_compat_263: [range(10)] | .[1.2:3.5]" {
   inspect(
     run_jq("[range(10)] | .[1.2:3.5]", "null"),
     content=(
-      #|["[1,2]"]
+      #|["[1,2,3]"]
     ),
   )
 }
@@ -2795,7 +2795,7 @@ test "jq_compat_264: [range(10)] | .[1.5:3.5]" {
   inspect(
     run_jq("[range(10)] | .[1.5:3.5]", "null"),
     content=(
-      #|["[1,2]"]
+      #|["[1,2,3]"]
     ),
   )
 }
@@ -2805,7 +2805,7 @@ test "jq_compat_265: [range(10)] | .[1.7:3.5]" {
   inspect(
     run_jq("[range(10)] | .[1.7:3.5]", "null"),
     content=(
-      #|["[1,2]"]
+      #|["[1,2,3]"]
     ),
   )
 }

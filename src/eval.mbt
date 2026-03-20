@@ -302,7 +302,16 @@ fn eval(
           Some(ee) =>
             eval(ee, input, env, ev => {
               match ev {
-                Number(n, ..) => e = Some(n.floor().to_int())
+                Number(n, ..) => {
+                  let floored = n.floor()
+                  // jq uses ceil for end index on non-integer floats
+                  let idx = if floored < n {
+                    floored.to_int() + 1
+                  } else {
+                    floored.to_int()
+                  }
+                  e = Some(idx)
+                }
                 _ => raise JqError("slice index must be a number")
               }
             })
