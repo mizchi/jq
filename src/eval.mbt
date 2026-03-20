@@ -457,12 +457,12 @@ fn eval(
         }
       })
     Arith(op, left, right) =>
-      eval(left, input, env, lv => {
-        eval(right, input, env, rv => yield_(arith_op(op, lv, rv)))
+      eval(right, input, env, rv => {
+        eval(left, input, env, lv => yield_(arith_op(op, lv, rv)))
       })
     Compare(op, left, right) =>
-      eval(left, input, env, lv => {
-        eval(right, input, env, rv => {
+      eval(right, input, env, rv => {
+        eval(left, input, env, lv => {
           yield_(Json::boolean(compare_op(op, lv, rv)))
         })
       })

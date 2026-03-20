@@ -611,7 +611,7 @@ test "jq_compat_59: [foreach .[] / .[] as $i (0; . + $i)]" {
   inspect(
     run_jq("[foreach .[] / .[] as $i (0; . + $i)]", "[1,2]"),
     content=(
-      #|["[1,1.5,3.5,4.5]"]
+      #|["[1,3,3.5,4.5]"]
     ),
   )
 }
